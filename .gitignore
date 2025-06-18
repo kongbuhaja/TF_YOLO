@@ -1,0 +1,16 @@
+# compiled
+__pycache__/
+
+# Environments
+.venv
+
+# dataset
+/ datasets
+
+# log
+/logs
+.out
+.err
+
+# vscode
+.vscode
