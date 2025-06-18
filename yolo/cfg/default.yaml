@@ -1,0 +1,8 @@
+task: detect # to be support segmentation
+
+preprocess:
+  normalize: True
+  resize_padding: [[640, 640], False, 0] # image_size, random, constant
+
+augmentation:
+  normalize: False
