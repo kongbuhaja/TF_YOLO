@@ -51,7 +51,7 @@ def coco(dataset):
 
             with open(path) as f:
                 json_data = json.load(f)
-            
+
             categories = {int(category["id"]): i for i, category in enumerate(json_data["categories"])}
 
             for image_data in json_data["images"]:
@@ -60,15 +60,16 @@ def coco(dataset):
                 height, width = image_data['height'], image_data['width']
                 data[dtype][id] = {"file": file,
                                    'size': (float(width), float(height)),
-                                   "box": []}
+                                   "segments": []}
                 
             for anno_data in json_data["annotations"]:
                 if not anno_data["iscrowd"]:
                     image_id = anno_data["image_id"]
                     category_id = anno_data["category_id"]
-                    box = anno_data["bbox"]
-                    data[dtype][image_id]["box"] += [[categories[category_id],
-                                                          box]]
+                    segments = anno_data["segmentation"]
+                    for segment in segments:
+                        data[dtype][image_id]["segments"] += [[categories[category_id],
+                                                               segment]]
         return data
 
     def save_labels(data):
@@ -80,17 +81,16 @@ def coco(dataset):
                 extension = anno["file"].split(".")[-1]
                 path = label_dir / anno["file"].replace(extension, "txt")
                 text = ""
-                for class_id, box in anno["box"]:
-                    box = (np.array(box).reshape([-1, 2]) / anno["size"]).reshape([-1])
-                    box[:2] += box[2:]/2
+                for class_id, segments in anno["segments"]:
+                    segments = (np.array(segments).reshape([-1, 2]) / anno["size"]).reshape([-1])
                     text += f"{class_id}"
-                    text += "".join([f" {c:.6}" for c in box]) + "\n"
+                    text += "".join([f" {c:.6}" for c in segments]) + "\n"
                 
                 with open(path, 'w') as f:
                     f.write(text.strip("\n"))
             print("Done.")
     # download()
-    extract()
-    make_structure()
+    # extract()
+    # make_structure()
     data = parse()
     save_labels(data)

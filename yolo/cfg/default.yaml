@@ -1,8 +1,45 @@
-task: detect # to be support segmentation
+task: &task detect # detect, segment
+
+model: yolo
+data: coco
+epochs: 2
+close_mosaic: 1
+batch_size: &batch_size 4
+shuffle: True
+image_size: &image_size [640, 640]
+constant: &constant 0 # (0-255) it can be list
 
 preprocess:
+  read_image: True
   normalize: True
-  resize_padding: [[640, 640], False, 0] # image_size, random, constant
 
-augmentation:
-  normalize: False
+augmentation: &augmentation
+  random_hsv: [0.15, 0.7, 0.4] # (+/- H, S, V)
+  random_resize: 0.5 # (+/- ratio)
+  random_rotate: [15, *constant] # (+/- degree, constant)
+  random_translate: 0.1 #(+/- ratio)
+  flip_ud: 0.5 # (prob)
+  flip_lr: 0.5 # (prob)
+
+process:
+  augmentation: *augmentation
+  mosaic: [*augmentation, *image_size] # (center_ratio, epochs, without_mosaic_epoch) 
+  resize_padding: [*image_size, True, *constant] # (image_size, center, constant) without mosaic
+  filter: 10
+  segment_to_task: *task
+  batch: [*batch_size, *task]
+  # batch: [*batch_size, False, 10, *task] # (batch_size, mosaic, min_wh, task)
+  # # mosaic: False
+  # filter: 10 # (task, min_wh)
+  # segment_to_task: *task # transform segments to something for task
+
+# batch: serialized_data
+#   resize_padding
+#   filter
+#   segment_to_task
+#   batch
+
+# mosaic: serialized_data
+#   mosaic:
+
+  
