@@ -152,7 +152,7 @@ class Random_rotate(Random_transform):
         for coord in coords:
             homogeneous_coord = np.hstack([coord * (w, h), np.ones([coord.shape[0], 1])])
             new_coord = homogeneous_coord @ M.T / (new_w, new_h)
-            new_coords += [new_coord]
+            new_coords.append(new_coord)
         return new_image, class_ids, new_coords
 
 class Random_translate(Random_transform):
@@ -165,7 +165,7 @@ class Random_translate(Random_transform):
         new_image = cv2.warpAffine(image, M, size)
         new_coords = []
         for coord in coords:
-            new_coords += [np.clip(coord + ratio, 0, 1)]
+            new_coords.append(np.clip(coord + ratio, 0, 1))
         return new_image, class_ids, new_coords
     
     
@@ -185,8 +185,8 @@ class Flip_ud(Prob_transform):
         h, w = np.array(image.shape[:2]).astype(np.float32)
         new_coords = []
         for coord in coords:
-            new_coords += [np.stack([coord[:, 0],
-                                     1. - coord[:, 1] - 1/h], -1)]
+            new_coords.append(np.stack([coord[:, 0],
+                              1. - coord[:, 1] - 1/h], -1))
         return new_image, class_ids, new_coords
     
 class Flip_lr(Prob_transform):
@@ -195,8 +195,8 @@ class Flip_lr(Prob_transform):
         h, w = np.array(image.shape[:2]).astype(np.float32)
         new_coords = []
         for coord in coords:
-            new_coords += [np.stack([1. - coord[:, 0] - 1/w,
-                                     coord[:, 1]], -1)]
+            new_coords.append(np.stack([1. - coord[:, 0] - 1/w,
+                                        coord[:, 1]], -1))
         return new_image, class_ids, new_coords
     
 # process
@@ -223,7 +223,7 @@ class Resize_padding(Transform):
         add = pad_LT.astype(np.float32)
         new_coords = []
         for coord in coords:
-            new_coords += [(coord * mult + add) / self.image_size]
+            new_coords.append((coord * mult + add) / self.image_size)
 
         return new_image, class_ids, new_coords
     
@@ -246,7 +246,7 @@ class Crop(Transform):
 
         new_coords = []
         for coord in coords:
-            new_coords += [np.clip((coord * (w, h) - org) / image_size, 0, 1)]
+            new_coords.append(np.clip((coord * (w, h) - org) / image_size, 0, 1))
         return new_image, class_ids, new_coords
 
 class Filter(Transform):
@@ -259,8 +259,8 @@ class Filter(Transform):
         for class_id, coord in zip(class_ids, coords):
             wh = (np.max(coord, 0) - np.min(coord, 0)) * size
             if np.all(wh > self.min_wh):
-                new_class_ids += [class_id]
-                new_coords += [coord]
+                new_class_ids.append(class_id)
+                new_coords.append(coord)
         new_class_ids = np.array(new_class_ids)
         return image, new_class_ids, new_coords
 
@@ -277,7 +277,7 @@ class Segment_to_task(Transform):
         boxes = []
         for coord in coords:
             xy1, xy2 = np.min(coord, 0), np.max(coord, 0)
-            boxes += [np.hstack([(xy1 + xy2) / 2, (xy2 - xy1)])]
+            boxes.append(np.hstack([(xy1 + xy2) / 2, (xy2 - xy1)]))
         boxes = np.array(boxes, np.float32)
         return image, (class_ids, boxes)
     
@@ -334,12 +334,12 @@ class Mosaic(Transform):
                 mosaic_image[y:y + new_h, x:x + new_w] = cv2.resize(image, (new_w, new_h))
                 for class_id, coord in zip(class_ids, coords):
                     coord = (coord * (new_w, new_h) + (x, y)) / self.mosaic_size
-                    mosaic_class_ids += [class_id]
-                    mosaic_coords += [coord]
+                    mosaic_class_ids.append(class_id)
+                    mosaic_coords.append(coord)
             
-            mosaic_data += [self.crop(mosaic_image, 
-                                      np.array(mosaic_class_ids), 
-                                      mosaic_coords)]
+            mosaic_data.append(self.crop(mosaic_image, 
+                                         np.array(mosaic_class_ids), 
+                                         mosaic_coords))
         return mosaic_data
     
     def __repr__(self):
@@ -356,8 +356,8 @@ class Batch(Transform):
     def apply(self, serialized_data):
         batch_image, batch_labels = [], []
         for image, labels in serialized_data:
-            batch_image += [image]
-            batch_labels += [labels]
+            batch_image.append(image)
+            batch_labels.append(labels)
         batch_image, batch_labels = self.batch(batch_image, batch_labels)
         return batch_image, batch_labels
     
@@ -366,9 +366,9 @@ class Batch(Transform):
         labels = []
         if self.task == "detect":
             for b, (class_ids, boxes) in enumerate(batch_labels):
-                labels += [np.concatenate([np.full([*class_ids.shape, 1], b, np.float32),
-                                           class_ids[:, None],
-                                           boxes], -1)]
+                labels.append(np.concatenate([np.full([*class_ids.shape, 1], b, np.float32),
+                                              class_ids[:, None],
+                                              boxes], -1))
             batch_labels = np.concatenate(labels, 0)
         elif self.task == "segment":
             batch_labels = np.stack(batch_labels, 0)

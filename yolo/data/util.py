@@ -68,8 +68,8 @@ def coco(dataset):
                     category_id = anno_data["category_id"]
                     segments = anno_data["segmentation"]
                     for segment in segments:
-                        data[dtype][image_id]["segments"] += [[categories[category_id],
-                                                               segment]]
+                        data[dtype][image_id]["segments"].append([categories[category_id],
+                                                                  segment])
         return data
 
     def save_labels(data):

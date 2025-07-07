@@ -31,7 +31,7 @@ class Dataset():
             if segments:
                 image = str(image_file)
                 segments = self.split_segments(segments)
-                data += [[image, *segments]]
+                data.append([image, *segments])
             else:
                 disregared_count += 1
         print(f"We use {len(data)} images without {disregared_count} images, which does not have labels.")
@@ -47,8 +47,8 @@ class Dataset():
         class_ids, coords = [], []
         for segment in segments:
             segment = segment.split(" ")
-            class_ids += [segment[0]]
-            coords += [np.array(segment[1:], np.float32).reshape([-1, 2])]
+            class_ids.append(segment[0])
+            coords.append(np.array(segment[1:], np.float32).reshape([-1, 2]))
         class_ids = np.array(class_ids, np.float32)
 
         return class_ids, coords    

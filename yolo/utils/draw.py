@@ -52,6 +52,6 @@ class Painter():
 
         for sv in [0.5+0.5/n * i for i in range(n+1)]:
             for h in [i/l for i in range(l)]:
-                colors += [(np.array(colorsys.hsv_to_rgb(h, sv, sv))*255).astype(np.int32).tolist()]
+                colors.append((np.array(colorsys.hsv_to_rgb(h, sv, sv))*255).astype(np.int32).tolist())
 
         return colors

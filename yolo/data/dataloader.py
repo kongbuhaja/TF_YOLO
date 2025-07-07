@@ -28,7 +28,7 @@ class Dataloader(Sequence):
         serialized_data = []
         for data in batch_data:
             data = self.preprocess(*data)
-            serialized_data += [data]
+            serialized_data.append(data)
         data = self.process(serialized_data)
         return data
     
