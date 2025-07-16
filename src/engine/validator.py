@@ -1,0 +1,75 @@
+from src.data import Dataloader
+from src.utils.metric import ap_per_class, box_iou, Metrics
+import numpy as np
+from tqdm import tqdm
+
+class Validator():
+    def __init__(self, cfg):
+        self.cfg = cfg
+        self.dtype = "train"#"val"
+        self.dataloader = Dataloader(self.cfg, self.dtype)
+        self.iouv = np.linspace(0.5, 0.95, 10)
+        self.metric = Metrics(len(self.cfg.data.classes))
+
+    def __call__(self, model="test"):
+        stats = {"tp": [],
+                 "conf": [],
+                 "p_cls": [],
+                 "t_cls": []}
+        
+        for batch_image, batch_labels in tqdm(self.dataloader, 
+                                              total=len(self.dataloader),
+                                              desc=f"Validate {self.cfg.data.name} {self.dtype} data"):
+        # for data in self.dataloader:
+            pass
+            if isinstance(model, str):
+                preds = self.test_model(batch_labels)
+            else:
+                preds = model(batch_image)
+                preds = self.test_model(batch_labels)
+            for b, pred in enumerate(preds):
+                labels = batch_labels[batch_labels[:, 0] == b]
+                t_cls, t_boxes = labels[:, 1], labels[:, 2:]
+                p_boxes, p_cls, conf = pred[:, :4], pred[:, 4], pred[:, 5]
+
+                iou = box_iou(t_boxes, p_boxes)
+                tp = self.match(iou, t_cls, p_cls)
+
+                stats["tp"].append(tp)
+                stats["conf"].append(conf)
+                stats["p_cls"].append(p_cls)
+                stats["t_cls"].append(t_cls)
+
+        for key, value in stats.items():
+            stats[key] = np.concatenate(value, 0)
+
+        result = ap_per_class(stats["tp"], stats["conf"], stats["p_cls"], stats["t_cls"])
+        self.metric.update(result)
+
+    def test_model(self, labels):
+        batch, classes, boxes = np.split(labels, [1,2], -1)
+        new_labels = []
+        for b in range(int(np.max(batch))):
+            batch_mask = batch.squeeze() == b
+            new_labels.append(np.concatenate([boxes[batch_mask] + 0.01, 
+                                              classes[batch_mask],
+                                              np.random.uniform(0.5, 1.0, (sum(batch_mask), 1))], -1))
+        return new_labels
+    
+    def match(self, iou, gt_classes, p_classes):
+        correct = np.zeros((p_classes.shape[0], self.iouv.shape[0])).astype(bool)
+        correct_mask = p_classes == gt_classes[:, None]
+        iou = iou * correct_mask
+        for i, threshold in enumerate(self.iouv):
+            matches = np.nonzero(iou >= threshold)
+            matches = np.array(matches).T
+            if matches.shape[0]:
+                if matches.shape[0] > 1:
+                    matches = matches[iou[matches[:, 0], matches[:, 1]].argsort()[::-1]]
+                    matches = matches[np.unique(matches[:, 1], return_index=True)[1]]
+                    matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
+                correct[matches[:, 1], i] = True
+        return correct
+
+        
+
