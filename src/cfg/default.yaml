@@ -9,7 +9,7 @@ close_mosaic: 2
 workers: 8
 batch_size: &batch_size 8
 cache: &cache True
-prefetch: 1
+prefetch: 4
 shuffle: True
 image_size: &image_size [640, 640]
 constant: &constant 0 # (0-255) it can be list

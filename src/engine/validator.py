@@ -20,31 +20,30 @@ class Validator():
         for batch_image, batch_labels in tqdm(self.dataloader, 
                                               total=len(self.dataloader),
                                               desc=f"Validate {self.cfg.data.name} {self.dtype} data"):
-        # for data in self.dataloader:
-            pass
-            if isinstance(model, str):
-                preds = self.test_model(batch_labels)
-            else:
-                preds = model(batch_image)
-                preds = self.test_model(batch_labels)
-            for b, pred in enumerate(preds):
-                labels = batch_labels[batch_labels[:, 0] == b]
-                t_cls, t_boxes = labels[:, 1], labels[:, 2:]
-                p_boxes, p_cls, conf = pred[:, :4], pred[:, 4], pred[:, 5]
+            continue
+        #     if isinstance(model, str):
+        #         preds = self.test_model(batch_labels)
+        #     else:
+        #         preds = model(batch_image)
+        #         preds = self.test_model(batch_labels)
+        #     for b, pred in enumerate(preds):
+        #         labels = batch_labels[batch_labels[:, 0] == b]
+        #         t_cls, t_boxes = labels[:, 1], labels[:, 2:]
+        #         p_boxes, p_cls, conf = pred[:, :4], pred[:, 4], pred[:, 5]
 
-                iou = box_iou(t_boxes, p_boxes)
-                tp = self.match(iou, t_cls, p_cls)
+        #         iou = box_iou(t_boxes, p_boxes)
+        #         tp = self.match(iou, t_cls, p_cls)
 
-                stats["tp"].append(tp)
-                stats["conf"].append(conf)
-                stats["p_cls"].append(p_cls)
-                stats["t_cls"].append(t_cls)
+        #         stats["tp"].append(tp)
+        #         stats["conf"].append(conf)
+        #         stats["p_cls"].append(p_cls)
+        #         stats["t_cls"].append(t_cls)
 
-        for key, value in stats.items():
-            stats[key] = np.concatenate(value, 0)
+        # for key, value in stats.items():
+        #     stats[key] = np.concatenate(value, 0)
 
-        result = ap_per_class(stats["tp"], stats["conf"], stats["p_cls"], stats["t_cls"])
-        self.metric.update(result)
+        # result = ap_per_class(stats["tp"], stats["conf"], stats["p_cls"], stats["t_cls"])
+        # self.metric.update(result)
 
     def test_model(self, labels):
         batch, classes, boxes = np.split(labels, [1,2], -1)

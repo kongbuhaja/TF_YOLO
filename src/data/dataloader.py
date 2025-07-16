@@ -15,7 +15,7 @@ class Dataloader():
         self.close_mosaic = self.epochs - self.close_mosaic + 1
         
         # data
-        self.data = Dataset(self.data).read_data(dtype, self.cache, self.workers)
+        self.data = Dataset(self.data)(dtype, self.cache, self.workers)
         self.indices = np.arange(len(self.data))
         self.idx = 0
         
@@ -75,7 +75,7 @@ class Dataloader():
             batch_data = [self.preprocess(*self.data[i]) for i in batch_indices]
 
             if getattr(self.process, "use_mosaic", False):
-                zip_data = zip(*([batch_data] * self.batch_size))
+                zip_data = zip(*([batch_data] * len(batch_data)))
             else:
                 zip_data = zip(*batch_data)
 

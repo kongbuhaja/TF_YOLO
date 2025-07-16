@@ -12,14 +12,14 @@ class Dataset():
         self.cfg = cfg
         self.cfg.path = Path(self.cfg.path).resolve()
 
-    def __call__(self, dtype):
+    def __call__(self, dtype, cache, workers):
         if not os.path.exists(self.cfg.path):
             if self.name == "coco":
                 coco(self)
 
-        return self.read_data(dtype)
+        return self.read_data(dtype, cache, workers)
     
-    def read_data(self, dtype, cache, workers=8):
+    def read_data(self, dtype, cache, workers):
         self.cache = cache
         data = []
         image_path = self.cfg.path / getattr(self.cfg, dtype, "")
@@ -41,7 +41,7 @@ class Dataset():
         return data
     
     def read(self, image_file):
-        file_name, extension = image_file.split(".")
+        file_name, extension = os.path.splitext(image_file)
         image_file = self.image_path / image_file
         label_file = self.image_path.parents[1] / "labels" / image_file.parent.name / f"{file_name}.txt"
         segments = self.read_labels(label_file)
