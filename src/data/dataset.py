@@ -62,11 +62,13 @@ class Dataset():
     
     def split_segments(self, segments):
         segments = segments.split("\n")
-        class_ids, coords = [], []
+        class_ids, coords, lengths = [], [], []
         for segment in segments:
             segment = segment.split(" ")
             class_ids.append(segment[0])
             coords.append(np.array(segment[1:], np.float32).reshape([-1, 2]))
+            lengths.append(len(coords[-1]))
+        coords = np.concatenate(coords, axis=0)
         class_ids = np.array(class_ids, np.float32)
 
-        return class_ids, coords    
+        return class_ids, coords, lengths

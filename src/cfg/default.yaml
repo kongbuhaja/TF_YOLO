@@ -19,14 +19,15 @@ preprocess:
 
 augmentation:
   mosaic: *image_size # (image_size)
-  random_perspective: [15, 0.1, 0.5, 0, 0] #(+/- rotate(15), translate(0.1), scale(0.5), shear(0), perspective(0))
+  random_perspective: [15, 0.1, 0.5, 0, 0] #(rotate(15), translate(0.1), scale(0.5), shear(0), perspective(0))
   random_hsv: [0.15, 0.7, 0.4] # (+/- H, S, V)
-  flip_ud: 0.5 # (prob)
+  flip_ud: 0.0 # (prob)
   flip_lr: 0.5 # (prob)
 
 process:
   resize_padding: [*image_size, True, *constant] # (image_size, center, constant) without mosaic
-  filter: 0.05
+  unsqueeze_coords: True
+  filter: 0.01
   segment_to_task: *task
 
 postprocess:

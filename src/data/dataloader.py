@@ -48,27 +48,6 @@ class Dataloader():
         self.idx += 1
         return data
 
-    # def __next__(self):
-    #     if self.idx >= len(self):
-    #         raise StopIteration
-        
-    #     batch_indices = self.indices[self.idx * self.batch_size : (self.idx + 1) * self.batch_size]
-    #     batch_data = [self.preprocess(*self.data[i]) for i in batch_indices]
-
-    #     if getattr(self.process, "use_mosaic", False):
-    #         zip_data = zip(*([batch_data] * self.batch_size))
-    #     else:
-    #         zip_data = zip(*batch_data)
-
-    #     with ThreadPoolExecutor(max_workers=self.workers) as executor:
-    #         data = list(executor.map(self.process, *zip_data))
-
-    #     data = self.postprocess(data)
-
-    #     self.idx += 1
-
-    #     return data
-
     def _prefetch(self):
         while not self._stop_signal and self.prefetch_idx < len(self):
             batch_indices = self.indices[self.prefetch_idx * self.batch_size : (self.prefetch_idx + 1) * self.batch_size]
