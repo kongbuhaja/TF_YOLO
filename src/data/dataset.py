@@ -13,9 +13,10 @@ class Dataset():
         self.cfg.path = Path(self.cfg.path).resolve()
 
     def __call__(self, dtype, cache, workers):
+        dtype = "train" if dtype == "eval" else dtype
         if not os.path.exists(self.cfg.path):
-            if self.name == "coco":
-                coco(self)
+            if self.cfg.name == "coco":
+                coco(self.cfg)
 
         return self.read_data(dtype, cache, workers)
     
@@ -30,7 +31,7 @@ class Dataset():
         results = []
         image_files = os.listdir(self.image_path)
         with ThreadPoolExecutor(max_workers=workers) as executor:
-            for r in tqdm(executor.map(self.read, image_files), 
+            for r in tqdm(executor.map(self.read_file, image_files), 
                           total=len(image_files),
                           desc=f"Reading {dtype} data"):
                 results.append(r)
@@ -40,17 +41,24 @@ class Dataset():
         print(f"We read {len(data)} images without {disregared_count} images, which does not have labels.")
         return data
     
-    def read(self, image_file):
+    def read_file(self, image_file):
         file_name, extension = os.path.splitext(image_file)
         image_file = self.image_path / image_file
         label_file = self.image_path.parents[1] / "labels" / image_file.parent.name / f"{file_name}.txt"
         segments = self.read_labels(label_file)
+
         if segments:
             image = self.read_image(image_file) if self.cache else image_file
-            segments = self.split_segments(segments)
-            return [image, *segments]
+            class_ids, coords, lengths = self.split_segments(segments)
+        
+            data = {"image_id": int(file_name),
+                    "image": image,
+                    "class_ids": class_ids,
+                    "coords": coords,
+                    "lengths": lengths}
+            return data
         else:
-            return None 
+            return None
 
     def read_labels(self, file):
         with open(file, "r") as f:
@@ -70,5 +78,5 @@ class Dataset():
             lengths.append(len(coords[-1]))
         coords = np.concatenate(coords, axis=0)
         class_ids = np.array(class_ids, np.float32)
-
-        return class_ids, coords, lengths
+        
+        return  class_ids, coords, lengths
