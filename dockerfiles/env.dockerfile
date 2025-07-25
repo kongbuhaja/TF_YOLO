@@ -42,4 +42,5 @@ RUN echo "== Install Dev Tools ==" &&\
     gdown \
     pyyaml \
     numpy \
-    scipy
+    scipy \
+    pycocotools
