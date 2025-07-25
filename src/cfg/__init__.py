@@ -10,8 +10,7 @@ DATASETS = PATH / "datasets"
 def yaml_load(file=PATH/"default.yaml"):
     assert os.path.exists(file), f'unknown {file}'
     with open(file, encoding="utf-8") as f:
-        s = f.read()
-        cfg = yaml.safe_load(s)
+        cfg = yaml.safe_load(f.read())
     return cfg
 
 class Config():
@@ -26,10 +25,20 @@ class Config():
         if hasattr(self, "data"):
             data_name = getattr(self, "data")
             self.data = Config(file = DATASETS / f"{data_name}.yaml")
-            self.data.name = data_name
+            self.data.name = data_name            
 
     def __repr__(self):
-        return str(self.__dict__)
+        text = ""
+        for key, value in self.__dict__.items():
+            text += f"self.{key}: "
+            if isinstance(value, Config):
+                text += "".join(f"\n    {line}" for line in str(value).split("\n"))
+            elif isinstance(value, dict):
+                text += "".join(f"\n    {k}: {v}" for k, v in value.items())
+            else:
+                text += f"{value}"
+            text += "\n"
+        return text[:-1]
 
 __all__ = (
     "Config",

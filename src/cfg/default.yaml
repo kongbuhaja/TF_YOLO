@@ -33,6 +33,4 @@ process:
 postprocess:
   batch: *task
   normalize: True
-
-
   
