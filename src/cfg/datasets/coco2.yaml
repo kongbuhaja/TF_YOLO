@@ -1,7 +1,9 @@
 path: ../datasets2/coco
-train: images/train2017_
-val: images/val2017_
-test: images/test2017_
+dirs:
+  train: images/train2017_
+  val: images/val2017_
+  test: images/test2017_
+  eval: annotations/instances_val2017.json
 
 classes:
   0: person

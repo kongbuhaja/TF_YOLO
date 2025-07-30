@@ -1,4 +1,4 @@
-task: &task box # box, segment
+task: &task bbox # bbox, segment
 
 num_processes: 1
 
@@ -25,7 +25,7 @@ augmentation:
   flip_lr: 0.5 # (prob)
 
 process:
-  resize_padding: [*image_size, True, *constant] # (image_size, center, constant) without mosaic
+  resize_padding: [*image_size, *constant, True] # (image_size, constant, center)
   unsqueeze_coords: True
   filter: 0.01
   segment_to_task: *task

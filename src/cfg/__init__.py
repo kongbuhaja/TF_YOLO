@@ -25,7 +25,10 @@ class Config():
         if hasattr(self, "data"):
             data_name = getattr(self, "data")
             self.data = Config(file = DATASETS / f"{data_name}.yaml")
-            self.data.name = data_name            
+            self.data.name = data_name
+            self.data.path = Path(self.data.path).resolve()
+            for key, value in self.data.dirs.items():
+                self.data.dirs[key] = self.data.path / value
 
     def __repr__(self):
         text = ""
