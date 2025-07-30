@@ -7,39 +7,35 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from copy import deepcopy
 
 class Dataloader():
-    def __init__(self, cfg, dtype="val"):
-        assert dtype.lower() in ["train", "val", "eval", "test"], "only support [train, val, test]"
-        self.dtype = dtype.lower()
+    def __init__(self, cfg, data={"data":[], "dtype":""}):
         for name, value in cfg.__dict__.items():
             setattr(self, name, value)
         self.epoch = 0
         self.close_mosaic = self.epochs - self.close_mosaic + 1
+        self.insert_data(data)
         
-        # data
-        self.data = Dataset(self.data)(dtype, self.cache, self.workers)
+        # prefetch
+        self.queue = Queue(maxsize=self.prefetch)
+
+    def insert_data(self, data):
+        self.dtype = data["dtype"]
+        self.data = data["data"]
         self.indices = np.arange(len(self.data))
         
         # process
         self.preprocess = Process(self.preprocess)
 
-        if dtype == "train" or dtype == "val":
+        if self.dtype == "train" or self.dtype == "val":
             self.process = Augmentation(self.augmentation) + Process(self.process)
-        elif dtype == "val":
+        elif self.dtype == "val":
             self.process = Process(self.process)
         else:
             self.batch_size = 1
-            self.postprocess["batch"] = "info"
-            # self.process = Process({"remove_labels": True,
-            #                         "resize_padding_with_info": [self.image_size, self.constant]})
-            self.process = Process({"resize_padding_with_info": [self.image_size, self.constant],
-                                    "unsqueeze_coords_test": True,
-                                    "segment_test": "box"})
+            self.process = Process({"resize_padding_with_info": self.process["resize_padding"][:2],
+                                    "unsqueeze_coords": self.process["unsqueeze_coords"],
+                                    "segment_to_task": self.process["segment_to_task"]})
 
         self.postprocess = Process(self.postprocess)
-
-        
-        # prefetch
-        self.queue = Queue(maxsize=self.prefetch)
 
     def __len__(self):
         return int(np.ceil(len(self.indices) / self.batch_size))
@@ -47,10 +43,6 @@ class Dataloader():
     def __iter__(self):
         self.on_epoch_start()
         return self
-    
-    # def __exit__(self, exc_type, exc_val, exc_tb):
-    #     print(1)
-    #     self.on_epoch_end()
     
     def __next__(self):
         if self.idx >= len(self):

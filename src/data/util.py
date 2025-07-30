@@ -6,11 +6,53 @@ from tqdm import tqdm
 import json, yaml
 import numpy as np
 
-def coco(cfg):
-    def download():
-        for dtype, url in cfg.urls.items():
+class Data():
+    def __init__(self):
+        self.eval_metric = self.coco_eval
+
+    def coco_eval(self, gt_json_path, dt_json_path, ann_type="bbox"):
+        from pycocotools.coco import COCO
+        from pycocotools.cocoeval import COCOeval
+        import io
+        from contextlib import redirect_stdout
+
+        summary_path = dt_json_path.parent / "evaluation.log"
+        coco_gt = COCO(gt_json_path)
+        coco_dt = coco_gt.loadRes(str(dt_json_path))
+
+        coco_eval = COCOeval(coco_gt, coco_dt, ann_type)
+        img_ids = sorted(coco_gt.getImgIds())
+        coco_eval.params.imgIds = img_ids
+
+        output_buffer = io.StringIO()
+        with redirect_stdout(output_buffer):
+            coco_eval.evaluate()
+            coco_eval.accumulate()
+            coco_eval.summarize()
+        
+        result = output_buffer.getvalue()
+
+        with open(summary_path, "w") as f:
+            f.write(result)
+        print(result)
+
+    def save_result(self, path, result):
+        with open(path, "w") as f:
+            json.dump(result, f)        
+
+class COCO(Data): 
+    def download(self, path, urls, dirs):
+        # self._load(path, urls)
+        # self._extract(path)
+        # self._make_structure(path, dirs)
+        data, category_map = self._parse(path)
+        self._save_labels(data, dirs)
+        self._save_category_map(path, category_map)
+
+    def _load(self, path, urls):
+        for dtype, url in urls.items():
             if url:
-                file = cfg.path / f"{dtype}.zip"
+                file = path / f"{dtype}.zip"
                 print(f"Downloading file for {dtype}.")
 
                 response = requests.get(url, stream=True)
@@ -26,28 +68,29 @@ def coco(cfg):
                 print("Done.")                
             else:
                 print(f"Skip {dtype} downloading.")
-    def extract():
-        for file in [path for path in cfg.path.iterdir() if path.is_file()]:
-            print(f"Extracting {file} to {cfg.path}.")
+
+    def _extract(self, path):
+        for file in [path for path in path.iterdir() if path.is_file()]:
+            print(f"Extracting {file} to {path}.")
             with zipfile.ZipFile(file, "r") as zip:
-                zip.extractall(cfg.path)
+                zip.extractall(path)
             print('Done.')
     
-    def make_structure():
-        for old_dir, new_dir in [("train2017", cfg.train),
-                                 ("val2017", cfg.val),
-                                 ("test2017", cfg.test)]:
-            old_path, new_path = cfg.path / old_dir, cfg.path / new_dir
-            label_path = cfg.path / new_dir.replace('images', 'labels')
+    def _make_structure(self, path, dirs):
+        for old_dir, new_path in [("train2017", dirs["train"]),
+                                 ("val2017", dirs["val"]),
+                                 ("test2017", dirs["test"])]:
+            old_path = path / old_dir
+            label_path = new_path.replace('images', 'labels')
             os.makedirs(label_path)
             shutil.move(old_path, new_path)
 
-    def parse():
+    def _parse(self, path):
         data = {}
         for dtype, file in [("train", "instances_train2017.json"),
                             ("val", "instances_val2017.json")]:
             data[dtype] = {}
-            path = cfg.path / "annotations" / file
+            path = path / "annotations" / file
             
             print(f"Realding {file}", end="")
             with open(path) as f:
@@ -76,32 +119,28 @@ def coco(cfg):
             print("Done")
         return data, category_map
 
-    def save_labels(data):
-        for dtype, image_dir in [("train", cfg.train),
-                                 ("val", cfg.val)]:
-            label_dir = cfg.path / image_dir.replace("images", "labels")
+    def _save_labels(self, data, dirs):
+        for dtype in ["train", "val"]:
+            image_dir = dirs[dtype]
+            label_dir = image_dir.parents[1] / "labels" / image_dir.name
             print(f"Making label files for {label_dir}.")
             for image_id, anno in data[dtype].items():
                 extension = anno["file"].split(".")[-1]
-                path = label_dir / anno["file"].replace(extension, "txt")
+                label_path = label_dir / anno["file"].replace(extension, "txt")
                 text = ""
                 for class_id, segments in anno["segments"]:
                     segments = (np.array(segments).reshape([-1, 2]) / anno["size"]).reshape([-1])
                     text += f"{class_id}"
                     text += "".join([f" {c:.6}" for c in segments]) + "\n"
                 
-                with open(path, 'w') as f:
+                with open(label_path, 'w') as f:
                     f.write(text.strip("\n"))
             print("Done.")
     
-    def save_category_map(category_map):
-        path = cfg.path / "category_map.yaml"
+    def _save_category_map(self, path, category_map):
+        path = path / "category_map.yaml"
         with open(path, "w") as f:
             yaml.safe_dump(category_map, f)
 
-    # download()
-    # extract()
-    # make_structure()
-    data, category_map = parse()
-    save_labels(data)
-    save_category_map(category_map)
+utils = {"coco": COCO,
+         "coco2": COCO}
