@@ -1,15 +1,13 @@
-from src.data import Dataloader
+from src.engine.handler import Handler
 from src.utils.metric import ap_per_class, box_iou, Metrics
 import numpy as np
 from tqdm import tqdm
 
-class Validator():
-    def __init__(self, cfg):
-        self.cfg = cfg
-        self.dtype = "train"#"val"
-        self.dataloader = Dataloader(self.cfg, self.dtype)
+class Validator(Handler):
+    def __init__(self, cfg, dataset):
+        super().__init__(cfg, dataset, "val")
         self.iouv = np.linspace(0.5, 0.95, 10)
-        self.metric = Metrics(len(self.cfg.data.classes))
+        self.metric = Metrics(len(self.dataset.classes))
 
     def __call__(self, model="test"):
         stats = {"tp": [],
@@ -17,40 +15,40 @@ class Validator():
                  "p_cls": [],
                  "t_cls": []}
         
-        for batch_image, batch_labels in tqdm(self.dataloader, 
-                                              total=len(self.dataloader),
-                                              desc=f"Validate {self.cfg.data.name} {self.dtype} data"):
-            continue
-        #     if isinstance(model, str):
-        #         preds = self.test_model(batch_labels)
-        #     else:
-        #         preds = model(batch_image)
-        #         preds = self.test_model(batch_labels)
-        #     for b, pred in enumerate(preds):
-        #         labels = batch_labels[batch_labels[:, 0] == b]
-        #         t_cls, t_boxes = labels[:, 1], labels[:, 2:]
-        #         p_boxes, p_cls, conf = pred[:, :4], pred[:, 4], pred[:, 5]
+        for data in tqdm(self.dataloader, 
+                         total=len(self.dataloader),
+                         desc=f"Validate {self.dataset.name} data"):
+            # continue
+            batch_image, batch_labels = data["image"], data["labels"]
+            if isinstance(model, str):
+                preds = self.test_model(batch_labels)
+            else:
+                preds = model(batch_image)
+            for b, pred in enumerate(preds):
+                labels = batch_labels[batch_labels[:, 0] == b]
+                t_cls, t_boxes = labels[:, 1], labels[:, 2:]
+                p_boxes, p_cls, conf = pred[:, :4], pred[:, 4], pred[:, 5]
 
-        #         iou = box_iou(t_boxes, p_boxes)
-        #         tp = self.match(iou, t_cls, p_cls)
+                iou = box_iou(t_boxes, p_boxes)
+                tp = self.match(iou, t_cls, p_cls)
 
-        #         stats["tp"].append(tp)
-        #         stats["conf"].append(conf)
-        #         stats["p_cls"].append(p_cls)
-        #         stats["t_cls"].append(t_cls)
+                stats["tp"].append(tp)
+                stats["conf"].append(conf)
+                stats["p_cls"].append(p_cls)
+                stats["t_cls"].append(t_cls)
 
-        # for key, value in stats.items():
-        #     stats[key] = np.concatenate(value, 0)
+        for key, value in stats.items():
+            stats[key] = np.concatenate(value, 0)
 
-        # result = ap_per_class(stats["tp"], stats["conf"], stats["p_cls"], stats["t_cls"])
-        # self.metric.update(result)
+        result = ap_per_class(stats["tp"], stats["conf"], stats["p_cls"], stats["t_cls"])
+        self.metric.update(result)
 
     def test_model(self, labels):
         batch, classes, boxes = np.split(labels, [1,2], -1)
         new_labels = []
         for b in range(int(np.max(batch))):
             batch_mask = batch.squeeze() == b
-            new_labels.append(np.concatenate([boxes[batch_mask] + 0.01, 
+            new_labels.append(np.concatenate([boxes[batch_mask] + 0.0, 
                                               classes[batch_mask],
                                               np.random.uniform(0.5, 1.0, (sum(batch_mask), 1))], -1))
         return new_labels
