@@ -3,6 +3,7 @@ __pycache__/
 
 # Environments
 .venv
+uv.lock
 
 # dataset
 / datasets
@@ -11,6 +12,9 @@ __pycache__/
 /logs
 .out
 .err
+
+# results
+/results
 
 # vscode
 .vscode
