@@ -20,7 +20,7 @@ class Model():
         pass
 
     def make_dir(self, name):
-        path = Path(".").resolve() / "results"
+        path = Path.cwd().resolve() / "results"
         os.makedirs(path, exist_ok=True)
         n = sum([d.startswith(name) for d in os.listdir(path)])
         self.path = path / f"{name}{n}"
