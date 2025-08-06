@@ -6,8 +6,12 @@ class Trainer(Handler):
         super().__init__(cfg, dataset, "train")
 
     def __call__(self, model):
-        for data in tqdm(self.dataloader,
-                         total=len(self.dataloader),
-                         desc=f"Train {self.dataset.name} data"):
-            pass
+        try:
+            for data in tqdm(self.dataloader,
+                            total=len(self.dataloader),
+                            desc=f"Train {self.dataset.name} data"):
+                pass
+
+        finally:
+            self.dataloader.on_epoch_end()
         
