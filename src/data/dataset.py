@@ -125,6 +125,7 @@ class Dataset():
             lengths.append(len(coords[-1]))
         coords = np.concatenate(coords, axis=0)
         class_ids = np.array(class_ids, np.float32)
+        lengths = np.array(lengths, np.int32)
         
         return  class_ids, coords, lengths
     

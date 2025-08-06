@@ -4,11 +4,14 @@ import cv2
 class Process():
     def __init__(self, cfg=dict()):
         self.transforms = []
-        for name, args in cfg.items():
-            transform, flag = get_transform(name, args)
-            if flag:
-                setattr(self, name, transform)
-                self.transforms.append(transform)
+        if cfg is not None:
+            for name, args in cfg.items():
+                transform, flag = get_transform(name, args)
+                if flag:
+                    setattr(self, name, transform)
+                    self.transforms.append(transform)
+        if hasattr(self, "mosaic"):
+            self.use_mosaic = True
 
     def __call__(self, data):
         for transform in self.transforms:
@@ -23,7 +26,7 @@ class Process():
                     if isinstance(s_value, list):
                         setattr(self, name, s_value + value)
                     else:
-                        return NotImplemented
+                        setattr(self, name, value)
                 else:
                     setattr(self, name, value)
             return self
@@ -35,6 +38,11 @@ class Process():
         for transform in self.transforms:
             text += f"{transform}\n"
         return text
+    
+    def close_mosaic(self):
+        if hasattr(self, "mosaic"):
+            self.transforms.remove(self.mosaic)
+            self.use_mosaic = False
     
 class Augmentation(Process):
     def __init__(self, cfg):
@@ -64,7 +72,7 @@ class Transform():
     def __repr__(self):
         return self.__class__.__name__
 
-# preprocessing
+# preprocessing    
 class Read_image(Transform):
     """
     Read image from the path if cache is False.
@@ -84,7 +92,15 @@ class Read_image(Transform):
                 coords: np.array(n, 2) squeezed coords
                 lengths: list(m,) indices of coords to unsqueeze
         """
-        data["image"] = cv2.imread(data["image"])[:,:, ::-1]
+        if isinstance(data, list):
+            if isinstance(data[0]["image"], np.ndarray):
+                return data
+            for i in range(len(data)):
+                data[i]["image"] = cv2.imread(data[i]["image"])[:,:, ::-1]
+        elif isinstance(data, dict):
+            if isinstance(data["image"], np.ndarray):
+                return data
+            data["image"] = cv2.imread(data["image"])[:,:, ::-1]
         return data
 
 # augmentation
@@ -101,7 +117,7 @@ class Mosaic(Transform):
         self.mosaic_size = (self.image_size * 2).astype(np.int32)
         self.div = self.mosaic_size.astype(np.float32)
         self.c_range = (0.4, 0.6)
-        self.crop = get_transform("crop", [self.image_size, 0.15, 0.35])[0]
+        self.crop = get_transform("crop", [self.image_size, 0.2, 0.3])[0]
 
     def apply(self, serialized_data):
         """
@@ -118,8 +134,6 @@ class Mosaic(Transform):
             mosaic_coords: np.array(l, 2) squeezed coords
             mosaic_lengths: np.array(k,) indices of coords to unsqueeze
         """
-        l = len(serialized_data)
-        indices = np.random.randint(0, l, 4)
         cx, cy = (np.random.uniform(*self.c_range, 2) * self.mosaic_size).astype(np.int32)
         xys = [(0, 0, cx, cy), 
                 (cx, 0, self.mosaic_size[0], cy), 
@@ -132,20 +146,19 @@ class Mosaic(Transform):
         mosaic_coords = []
         mosaic_lengths = []
 
-        for i, ((x1, y1, x2, y2), idx) in enumerate(zip(xys, indices)):
-            data = serialized_data[idx]
+        for i, ((x1, y1, x2, y2), data) in enumerate(zip(xys, serialized_data)):
             h, w = data["image"].shape[:2]
             ratio = min((x2 - x1)/w, (y2 - y1)/h)
             new_w, new_h = int(w * ratio), int(h * ratio)
             x = x1 if i % 2 else x2 - new_w
             y = y1 if i // 2 else y2 - new_h 
 
-            mult = np.array([new_w, new_h], np.float32)
-            add = np.array([x,y], np.float32)
+            mult = np.array([new_w, new_h], np.float32) / self.div
+            add = np.array([x,y], np.float32) / self.div
             mosaic_image_id += f"{data['image_id']}_"
             mosaic_image[y:y + new_h, x:x + new_w] = cv2.resize(data["image"], (new_w, new_h))
             mosaic_class_ids.append(data["class_ids"])
-            mosaic_coords.append((data["coords"] * mult + add) / self.div)
+            mosaic_coords.append(data["coords"] * mult + add)
             mosaic_lengths.append(data["lengths"])
         
         data = {"image_id": mosaic_image_id[:-1],
@@ -167,7 +180,7 @@ class Crop(Transform):
             new_image_size: final image_size if it is smaller than calculated size
             low, high: ratio of the [left, top] point ([right, bottom]: min(left, top + new_image_size, image_size)
         """
-        self.new_image_size = np.array(new_image_size, np.int32) if new_image_size is not None else None
+        self.crop_size = np.array(new_image_size, np.int32) if new_image_size is not None else None
         self.low, self.high = low, high
 
     def apply(self, data):
@@ -186,20 +199,22 @@ class Crop(Transform):
                 lengths: np.array(m,) indices of coords to unsqueeze
         """
         h, w = data["image"].shape[:2]
-        org = (np.random.uniform(self.low, self.high, 2) * (w, h)).astype(np.int32)
-        if self.new_image_size is None:
-            random_size = (1 - np.random.uniform(self.low, self.high, 2)) * (w, h)
-            image_size = np.min([random_size, (w, h) - org]).astype(np.int32)
+        org_size = np.array([w, h], np.float32)
+        left_top = (np.random.uniform(self.low, self.high, 2) * org_size).astype(np.int32)
+        if self.crop_size is None:
+            max_crop_size = org_size.astype(np.int32) - left_top
+            min_crop_size = ((1 - 0.25) * org_size).astype(np.int32)
+            crop_size = np.minimum(min_crop_size, max_crop_size).astype(np.int32)
         else:
-            image_size = self.new_image_size
+            max_crop_size = org_size.astype(np.int32) - left_top
+            crop_size = np.minimum(self.crop_size, max_crop_size)
         
-        dst = org + image_size
-        data["image"] = data["image"][org[1]:dst[1], org[0]:dst[0]]
+        right_bottom = left_top + crop_size
+        data["image"] = data["image"][left_top[1]:right_bottom[1], left_top[0]:right_bottom[0]]
 
-        mult = np.array([w, h], np.float32)
-        add = org.astype(np.float32)
-        div = image_size.astype(np.float32)
-        data["coords"] = np.clip((data["coords"] * mult - add) / div, 0, 1)
+        mult = org_size / crop_size.astype(np.float32)
+        add = -left_top.astype(np.float32) / crop_size.astype(np.float32)
+        data["coords"] = np.clip(data["coords"] * mult + add, 0, 1)
 
         return data
     
@@ -274,10 +289,21 @@ class Random_perspective(Random_transform):
         else:
             data["image"] = cv2.warpAffine(data["image"], M[:2], dsize=(new_w, new_h), borderValue=self.constant)
         
-        mult = np.array([w, h], np.float32)
-        div = np.array([new_w, new_h], np.float32)
-        coords = np.hstack([data["coords"] * mult, np.ones([data["coords"].shape[0], 1], np.float32)]) @ M.T
-        data["coords"] = np.clip(coords[:, :2] / coords[:, 2:3] / div, 0, 1)
+        # mult = np.array([w, h], np.float32)
+        # div = np.array([new_w, new_h], np.float32)
+        # coords = np.hstack([data["coords"] * mult, np.ones([data["coords"].shape[0], 1], np.float32)]) @ M.T
+        # data["coords"] = np.clip(coords[:, :2] / coords[:, 2:3] / div, 0, 1)
+        
+        coords = data["coords"] * np.array([w, h], np.float32)
+        N = coords.shape[0]
+
+        coords_hom = np.empty((N, 3), dtype=np.float32)
+        coords_hom[:, :2] = coords
+        coords_hom[:, 2] = 1.0
+        
+        coords_hom @= M.T 
+
+        data["coords"] = np.clip(coords_hom[:, :2] / coords_hom[:, 2:3] / np.array([new_w, new_h], np.float32), 0, 1)
         return data
     
 class Random_HSV(Random_transform):
@@ -355,8 +381,9 @@ class Flip_ud(Prob_transform):
         """
         data["image"] = data["image"][::-1]
         h, w = np.array(data["image"].shape[:2]).astype(np.float32)
-        data["coords"] = np.stack([data["coords"][:, 0],
-                               1. - data["coords"][:, 1] - 1/h], -1)
+        flip_offset = 1. - 1./h
+        data["coords"][:, 1] = flip_offset - data["coords"][:, 1]
+
         return data
     
 class Flip_lr(Prob_transform):
@@ -380,8 +407,9 @@ class Flip_lr(Prob_transform):
         """
         data["image"] = data["image"][:, ::-1]
         h, w = np.array(data["image"].shape[:2]).astype(np.float32)
-        data["coords"] = np.stack([1. - data["coords"][:, 0] - 1/w,
-                               data["coords"][:, 1]], -1)
+        flip_offset = 1. - 1./w
+        data["coords"][:, 0] = flip_offset - data["coords"][:, 0]
+
         return data
     
 # process
@@ -432,9 +460,10 @@ class Resize_padding(Transform):
         new_image[t:b, l:r] = cv2.resize(data["image"], resize_size)
         data["image"] = new_image
         
-        mult = org_size * ratio
-        add = pad_LT.astype(np.float32)
-        data["coords"] = (data["coords"] * mult + add) / self.image_size
+        mult = org_size * ratio / self.image_size
+        add = pad_LT.astype(np.float32) / self.image_size
+
+        data["coords"] = data["coords"] * mult + add
         return data
     
 class Unsqueeze_coords(Transform):
@@ -495,9 +524,8 @@ class Filter(Transform):
         else:
             mins = np.array([coord.min(axis=0) for coord in data["coords"]])
             maxs = np.array([coord.max(axis=0) for coord in data["coords"]])
-            wh = (maxs - mins) * size
             
-            mask = (wh > filter_size).all(axis=-1)
+            mask = ((maxs - mins) * size > filter_size).all(axis=-1)
 
             data["class_ids"] = data["class_ids"][mask]
             data["coords"] = [data["coords"][i] for i in np.flatnonzero(mask)]
@@ -596,7 +624,7 @@ class Batch(Transform):
         serialized_image = [data["image"] for data in serialized_data]
 
         batch_image_id = [data['image_id'] for data in serialized_data]
-        batch_image = np.stack(serialized_image, 0).astype(np.float32)
+        batch_image = np.stack(serialized_image, 0, dtype=np.float32)
         batch_data = {"image_id": batch_image_id,
                       "image": batch_image}
         if self.task in ["bbox", "segment"]:
@@ -684,7 +712,7 @@ class Resize_padding_with_info(Transform):
         """
         org_size = np.array(data["image"].shape[:2][::-1], np.float32)
         mult = org_size
-        data["coords"] *= mult
+        data["coords"] = data["coords"] * mult
 
         if (self.image_size == org_size).all():
             data["info"] = (1.0, 1.0, 0, 0)
@@ -717,7 +745,7 @@ def get_transform(name, args):
 
     if name == "read_image":
         transform = Read_image()
-        args = not args
+        # args = not args
     elif name == "mosaic":
         transform = Mosaic(args)
     elif name == "crop":
