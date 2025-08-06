@@ -2,24 +2,21 @@ task: &task bbox # bbox, segment
 
 num_processes: 1
 
-model: yolo
+model: yolo11n.yaml
 data: coco
-epochs: 3
-close_mosaic: 2
+epochs: 2
+close_mosaic: 1
 workers: 8
-batch_size: &batch_size 8
-cache: &cache True
-prefetch: 4
+batch_size: &batch_size 16
+cache: &cache False # need least 100G memory
+prefetch: 2
 shuffle: True
 image_size: &image_size [640, 640]
 constant: &constant 0 # (0-255) it can be list
 
-preprocess:
-  read_image: *cache
-
 augmentation:
   mosaic: *image_size # (image_size)
-  random_perspective: [15, 0.1, 0.5, 0, 0] #(rotate(15), translate(0.1), scale(0.5), shear(0), perspective(0))
+  random_perspective: [0, 0.1, 0.5, 0, 0] #(rotate(15), translate(0.1), scale(0.5), shear(0), perspective(0))
   random_hsv: [0.15, 0.7, 0.4] # (+/- H, S, V)
   flip_ud: 0.0 # (prob)
   flip_lr: 0.5 # (prob)
@@ -27,7 +24,7 @@ augmentation:
 process:
   resize_padding: [*image_size, *constant, True] # (image_size, constant, center)
   unsqueeze_coords: True
-  filter: 0.01
+  filter: 0.02
   segment_to_task: *task
 
 postprocess:
