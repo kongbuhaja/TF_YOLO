@@ -25,7 +25,8 @@ class Config():
             
         if hasattr(self, "model"):
             file, scale, weight_file = _get_model_file(self.model)
-            self.model = Config(file=file, 
+            self.model = Config(name=file.name.rstrip(".yaml"),
+                                file=file, 
                                 scale=scale,
                                 weight_file=weight_file,
                                 image_size=self.image_size)

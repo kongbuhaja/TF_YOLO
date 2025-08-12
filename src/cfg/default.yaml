@@ -9,7 +9,7 @@ close_mosaic: 1
 workers: 8
 batch_size: &batch_size 16
 cache: &cache False # need least 100G memory
-prefetch: 2
+prefetch_size: 8
 shuffle: True
 image_size: &image_size [640, 640]
 constant: &constant 0 # (0-255) it can be list
