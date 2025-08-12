@@ -5,7 +5,7 @@ from tqdm import tqdm
 from src.data.util import utils
 import cv2
 from multiprocessing import Pool
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class Dataset():
     def __init__(self, cfg):
@@ -18,7 +18,7 @@ class Dataset():
         
         self.util = utils[self.name]()
         if not os.path.exists(self.path):
-            self.util.download(self.path, self.urls, self.dirs)
+            self.util.download(self.path, self.urls, self.dirs, workers)
         
         data = self.read_data(dtype, cache, workers)
         data["dtype"] = dtype
@@ -74,12 +74,23 @@ class Dataset():
 
         results = []
         image_files = os.listdir(image_dir)
+        total = len(image_files)
 
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            for r in tqdm(executor.map(self.read_file, [image_dir / image_file for image_file in image_files]), 
-                          total=len(image_files),
-                          desc=f"Reading data for {dtype}"):
-                results.append(r)
+        if workers > 1:
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = [executor.submit(self.read_file, image_dir, image_file) for image_file in image_files]
+                
+            iterator = tqdm(as_completed(futures),
+                            total=total,
+                            desc=f"Reading data for {dtype}")
+            for it in iterator:
+                results.append(it.result())
+        
+        else:
+            for image_file in tqdm(image_files,
+                                   total=total,
+                                   desc=f"Reading data for {dtype}"):
+                results.append(self.read_file(image_dir, image_file))
         
         data = [r for r in results if r is not None]
         disregared_count = len(results) - len(data)
@@ -89,7 +100,8 @@ class Dataset():
 
         return {"data": data, "dtype": dtype, "category_map": self.category_map}
     
-    def read_file(self, image_file):
+    def read_file(self, image_dir, image_file):
+        image_file = image_dir / image_file
         file_name, extension = os.path.splitext(image_file.name)
         label_file = image_file.parents[2] / "labels" / image_file.parent.name / f"{file_name}.txt"
         segments = self.read_labels(label_file)

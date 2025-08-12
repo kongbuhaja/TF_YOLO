@@ -5,6 +5,7 @@ import requests
 from tqdm import tqdm
 import json, yaml
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class Data():
     def __init__(self):
@@ -41,12 +42,12 @@ class Data():
             json.dump(result, f)        
 
 class COCO(Data): 
-    def download(self, path, urls, dirs):
+    def download(self, path, urls, dirs, workers):
         # self._load(path, urls)
         # self._extract(path)
         # self._make_structure(path, dirs)
         data, category_map = self._parse(path)
-        self._save_labels(data, dirs)
+        self._save_labels(data, dirs, workers)
         self._save_category_map(path, category_map)
 
     def _load(self, path, urls):
@@ -81,7 +82,7 @@ class COCO(Data):
                                  ("val2017", dirs["val"]),
                                  ("test2017", dirs["test"])]:
             old_path = path / old_dir
-            label_path = new_path.replace('images', 'labels')
+            label_path = new_path.parents[1] / "labels" / new_path.name
             os.makedirs(label_path)
             shutil.move(old_path, new_path)
 
@@ -90,10 +91,10 @@ class COCO(Data):
         for dtype, file in [("train", "instances_train2017.json"),
                             ("val", "instances_val2017.json")]:
             data[dtype] = {}
-            path = path / "annotations" / file
+            file_path = path / "annotations" / file
             
-            print(f"Realding {file}", end="")
-            with open(path) as f:
+            print(f"Reading {file}", end=" ")
+            with open(file_path) as f:
                 json_data = json.load(f)
 
             categories = {int(category["id"]): i for i, category in enumerate(json_data["categories"])}
@@ -116,26 +117,42 @@ class COCO(Data):
                     for segment in segments:
                         data[dtype][image_id]["segments"].append([categories[category_id],
                                                                   segment])
-            print("Done")
+            print("Done.")
         return data, category_map
 
-    def _save_labels(self, data, dirs):
+    def _save_labels(self, data, dirs, workers):
+        def _write(label_dir, anno):
+            extension = anno["file"].split(".")[-1]
+            label_path = label_dir / anno["file"].replace(extension, "txt")
+
+            lines = []
+            for class_id, segments in anno["segments"]:
+                seg = (np.array(segments).reshape([-1, 2]) / anno["size"]).reshape([-1])
+                line = f"{class_id}" + "".join([f" {c:.6f}" for c in seg])
+                lines.append(line)
+            text = "\n".join(lines)
+
+            with open(label_path, "w") as f:
+                f.write(text)
+
+
         for dtype in ["train", "val"]:
             image_dir = dirs[dtype]
             label_dir = image_dir.parents[1] / "labels" / image_dir.name
-            print(f"Making label files for {label_dir}.")
-            for image_id, anno in data[dtype].items():
-                extension = anno["file"].split(".")[-1]
-                label_path = label_dir / anno["file"].replace(extension, "txt")
-                text = ""
-                for class_id, segments in anno["segments"]:
-                    segments = (np.array(segments).reshape([-1, 2]) / anno["size"]).reshape([-1])
-                    text += f"{class_id}"
-                    text += "".join([f" {c:.6}" for c in segments]) + "\n"
-                
-                with open(label_path, 'w') as f:
-                    f.write(text.strip("\n"))
-            print("Done.")
+            os.makedirs(label_dir, exist_ok=True)
+
+            items = list(data[dtype].items())
+            total = len(items)
+
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                futures = [executor.submit(_write, label_dir, anno) for image_id, anno in items]
+
+            iterator = tqdm(as_completed(futures), 
+                            total=total, 
+                            desc=f"Making label files for {dtype}", unit="file")
+            
+            for it in iterator:
+                it.result()
     
     def _save_category_map(self, path, category_map):
         path = path / "category_map.yaml"
