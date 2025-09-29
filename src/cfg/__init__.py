@@ -24,12 +24,13 @@ class Config():
             setattr(self, key, value)
             
         if hasattr(self, "model"):
+            print(self.model)
             file, scale, weight_file = _get_model_file(self.model)
             self.model = Config(name=file.name.rstrip(".yaml"),
                                 file=file, 
                                 scale=scale,
                                 weight_file=weight_file,
-                                image_size=self.image_size)
+                                image_shape=self.image_shape)
 
         if hasattr(self, "data"):
             self.data = Config(file=DATASETS / f"{self.data}.yaml", 
@@ -60,6 +61,7 @@ def _get_model_file(path):
                 files.update(_get_all_files(path / file))
             elif os.path.isfile(path / file):
                 files[file] = (path / file)
+        print(files)
         return files
 
     def check_file(file):

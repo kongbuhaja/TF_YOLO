@@ -113,7 +113,7 @@ class Mosaic(Transform):
         input:
             image_size: final image size
         """
-        self.image_size = np.array(image_size, np.int32)
+        self.image_size = np.array(image_size[:2], np.int32)
         self.mosaic_size = (self.image_size * 2).astype(np.int32)
         self.div = self.mosaic_size.astype(np.float32)
         self.c_range = (0.4, 0.6)
@@ -180,7 +180,7 @@ class Crop(Transform):
             new_image_size: final image_size if it is smaller than calculated size
             low, high: ratio of the [left, top] point ([right, bottom]: min(left, top + new_image_size, image_size)
         """
-        self.crop_size = np.array(new_image_size, np.int32) if new_image_size is not None else None
+        self.crop_size = np.array(new_image_size, np.int32)[:2] if new_image_size is not None else None
         self.low, self.high = low, high
 
     def apply(self, data):
@@ -424,7 +424,7 @@ class Resize_padding(Transform):
             center: flag of image with center position
             constant: padding value
         """
-        self.image_size = np.array(image_size, np.float32)
+        self.image_size = np.array(image_size[:2], np.float32)
         self.center = center
         self.constant = constant
 
@@ -691,7 +691,7 @@ class Resize_padding_with_info(Transform):
             image_size: final image size
             constant: padding value
         """
-        self.image_size = np.array(image_size, np.float32)
+        self.image_size = np.array(image_size[:2], np.float32)
         self.constant = constant
 
     def apply(self, data):

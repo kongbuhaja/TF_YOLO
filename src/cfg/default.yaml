@@ -11,18 +11,18 @@ batch_size: &batch_size 16
 cache: &cache False # need least 100G memory
 prefetch_size: 8
 shuffle: True
-image_size: &image_size [640, 640]
+image_shape: &image_shape [640, 640, 3]
 constant: &constant 0 # (0-255) it can be list
 
 augmentation:
-  mosaic: *image_size # (image_size)
+  mosaic: *image_shape # (image_shape)
   random_perspective: [0, 0.1, 0.5, 0, 0] #(rotate(15), translate(0.1), scale(0.5), shear(0), perspective(0))
   random_hsv: [0.15, 0.7, 0.4] # (+/- H, S, V)
   flip_ud: 0.0 # (prob)
   flip_lr: 0.5 # (prob)
 
 process:
-  resize_padding: [*image_size, *constant, True] # (image_size, constant, center)
+  resize_padding: [*image_shape, *constant, True] # (image_shape, constant, center)
   unsqueeze_coords: True
   filter: 0.02
   segment_to_task: *task
