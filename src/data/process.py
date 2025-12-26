@@ -569,7 +569,7 @@ class Segment_to_task(Transform):
         for coord in data["coords"]:
             xy1, xy2 = np.min(coord, 0), np.max(coord, 0)
             xywh.append(np.hstack([(xy1 + xy2) / 2, (xy2 - xy1)]))
-        bboxes = np.hstack([data["class_ids"][:, None], np.array(xywh, np.float32)]) if data["class_ids"].shape[0] else np.zeros([0, 6])
+        bboxes = np.hstack([data["class_ids"][:, None], np.array(xywh, np.float32)]) if data["class_ids"].shape[0] else np.zeros([0, 5])
         return bboxes
     
     def segment_to_mask(self, data):
@@ -597,12 +597,13 @@ class Batch(Transform):
     """
     Batch serialized data
     """
-    def __init__(self, task):
+    def __init__(self, task, max_det=300):
         """
         input:
             task: str
         """
         self.task = task
+        self.max_det = max_det
 
     def apply(self, serialized_data):
         """
@@ -617,7 +618,7 @@ class Batch(Transform):
             batch_data: [batch_image, batch_labels]
                 image: np.array(b, h, w, 3)
                 labels: one of [batch_bboxes, batch_mask]
-                    batch_bboxes: np.array(m, 6) [b, c, x, y, w, h]
+                    batch_bboxes: np.array(b, max_det, 5) [c, x, y, w, h]
                     batch_mask: np.array(b, h, w)
                 info: list(b, 4) [rx(f), ry(f), l(i), t(i)] if eval or test
         """
@@ -646,18 +647,14 @@ class Batch(Transform):
             serialized_boxes: [bboxes_1, bboxes_2, ..., bboxes_b]
                 boxes: np.array(n, 5)
         output:
-            batch_bboxes: np.array(m, 6) [b, c, x, y, w h]
+            batch_bboxes: np.array(b, max_det, 5) [c, x, y, w h]
         """
-        result = []
+        B = len(serialized_bboxes)
+        result = np.zeros([B, self.max_det, 5])
+        
         for b, bboxes in enumerate(serialized_bboxes):
             n = bboxes.shape[0]
-            if n:
-                batch_idx = np.full((n, 1), b, dtype=np.float32)
-                result.append(np.hstack([batch_idx, bboxes]))
-
-        if result:
-            return np.vstack(result)
-        return np.empty((0, 6), dtype=np.float32)
+            result[b][:n] = bboxes
     
     def batch_mask(self, serialized_mask):
         """
@@ -771,7 +768,7 @@ def get_transform(name, args):
         transform = Segment_to_task(args)
     
     elif name == "batch":
-        transform = Batch(args)
+        transform = Batch(*args)
     elif name == "normalize":
         transform = Normalize()
 

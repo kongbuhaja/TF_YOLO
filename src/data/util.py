@@ -43,32 +43,89 @@ class Data():
 
 class COCO(Data): 
     def download(self, path, urls, dirs, workers):
-        # self._load(path, urls)
-        # self._extract(path)
-        # self._make_structure(path, dirs)
+        self._load(path, urls)
+        self._extract(path)
+        self._make_structure(path, dirs)
         data, category_map = self._parse(path)
         self._save_labels(data, dirs, workers)
         self._save_category_map(path, category_map)
 
+    # def _load(self, path, urls): # 인자로 받은 urls는 무시하고 내부에서 정의한 S3 주소를 씁니다.
+    #     import pathlib
+    #     if isinstance(path, str):
+    #         path = pathlib.Path(path)
+            
+    #     if not path.exists():
+    #         path.mkdir(parents=True, exist_ok=True)
+
+    #     # [핵심 해결책] 리다이렉트 없는 AWS S3 원본 '직통' 주소
+    #     # 일반 주소: images.cocodataset.org (리다이렉트 발생 -> 에러 원인)
+    #     # 원본 주소: images.cocodataset.org.s3.amazonaws.com (직통 -> 해결)
+    #     s3_urls = {
+    #         "train": "http://images.cocodataset.org.s3.amazonaws.com/zips/train2017.zip",
+    #         "val": "http://images.cocodataset.org.s3.amazonaws.com/zips/val2017.zip",
+    #         "test": "http://images.cocodataset.org.s3.amazonaws.com/zips/test2017.zip"
+    #     }
+
+    #     for dtype, url in s3_urls.items():
+    #         file_path = path / f"{dtype}.zip"
+    #         print(f"Downloading {dtype} from S3 Direct URL: {url}")
+
+    #         try:
+    #             # verify=False: SSL 인증서 검사 생략
+    #             # stream=True: 대용량 파일 다운로드 필수 옵션
+    #             response = requests.get(url, stream=True, verify=False)
+                
+    #             # 만약 여기서도 에러가 나면 서버가 보내준 에러 메시지를 출력
+    #             if response.status_code != 200:
+    #                 print(f"Failed with status code: {response.status_code}")
+    #                 # 404 등의 원인을 알기 위해 서버 메시지 일부 출력
+    #                 print(f"Server Message: {response.text[:200]}")
+    #                 continue
+
+    #             total = int(response.headers.get("content-length", 0))
+                
+    #             with open(file_path, "wb") as f, tqdm(desc=f"{dtype}.zip",
+    #                                                 total=total,
+    #                                                 unit="B",
+    #                                                 unit_scale=True,
+    #                                                 unit_divisor=1024) as bar:
+    #                 for data in response.iter_content(chunk_size=16*1024):
+    #                     size = f.write(data)
+    #                     bar.update(size)
+    #             print("Done.")
+
+    #         except Exception as e:
+    #             print(f"Critical Error downloading {dtype}: {e}")
+
     def _load(self, path, urls):
+        if not path.exists():
+            os.makedirs(path, exist_ok=True)
+            
         for dtype, url in urls.items():
             if url:
-                file = path / f"{dtype}.zip"
-                print(f"Downloading file for {dtype}.")
+                file_path = path / f"{dtype}.zip"
+                print(f"Downloading file for {dtype} from {url}.")
 
-                response = requests.get(url, stream=True)
-                total = int(response.headers.get("content-length", 0))
-                with open(file, "wb") as file, tqdm(desc=f"{dtype}.zip",
-                                                    total = total,
-                                                    unit = "B",
-                                                    unit_scale=True,
-                                                    unit_divisor=1024) as bar:
-                    for data in response.iter_content(chunk_size=16*1024):
-                        size = file.write(data)
-                        bar.update(size)
-                print("Done.")                
+                try:
+                    response = requests.get(url, stream=True, verify=False)
+                    response.raise_for_status()
+
+                    total = int(response.headers.get("content-length", 0))
+
+                    with open(file_path, "wb") as file, tqdm(desc=f"{dtype}.zip",
+                                                            total = total,
+                                                            unit = "B",
+                                                            unit_scale=True,
+                                                            unit_divisor=1024) as bar:
+                        for data in response.iter_content(chunk_size=16*1024):
+                            size = file.write(data)
+                            bar.update(size)
+                    print("Done.")
+                except requests.exceptions.RequestException as e:
+                    print(f"Error downloading {dtype} from {url}: {e}")
             else:
-                print(f"Skip {dtype} downloading.")
+                print(f"Skip {dtype} downloading from {url}.")
 
     def _extract(self, path):
         for file in [path for path in path.iterdir() if path.is_file()]:

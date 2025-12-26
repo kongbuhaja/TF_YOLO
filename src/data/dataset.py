@@ -80,11 +80,10 @@ class Dataset():
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = [executor.submit(self.read_file, image_dir, image_file) for image_file in image_files]
                 
-            iterator = tqdm(as_completed(futures),
-                            total=total,
-                            desc=f"Reading data for {dtype}")
-            for it in iterator:
-                results.append(it.result())
+                for it in tqdm(as_completed(futures),
+                               total=total,
+                               desc=f"Reading data for {dtype}"):
+                    results.append(it.result())
         
         else:
             for image_file in tqdm(image_files,
