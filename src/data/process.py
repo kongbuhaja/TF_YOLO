@@ -597,7 +597,7 @@ class Batch(Transform):
     """
     Batch serialized data
     """
-    def __init__(self, task, max_det=300):
+    def __init__(self, task, max_det=None):
         """
         input:
             task: str
@@ -650,11 +650,13 @@ class Batch(Transform):
             batch_bboxes: np.array(b, max_det, 5) [c, x, y, w h]
         """
         B = len(serialized_bboxes)
-        result = np.zeros([B, self.max_det, 5])
+        lengths = [bboxes.shape[0] for bboxes in serialized_bboxes]
+        max_det = max(lengths) if self.max_det is None else self.max_det
+        result = np.zeros([B, max_det, 5], dtype=np.float32)
         
-        for b, bboxes in enumerate(serialized_bboxes):
-            n = bboxes.shape[0]
-            result[b][:n] = bboxes
+        for b, (bboxes, length) in enumerate(zip(serialized_bboxes, lengths)):
+            result[b][:length] = bboxes
+        return result
     
     def batch_mask(self, serialized_mask):
         """
@@ -744,7 +746,7 @@ def get_transform(name, args):
         transform = Read_image()
         # args = not args
     elif name == "mosaic":
-        transform = Mosaic(args)
+        transform = Mosaic(*args)
     elif name == "crop":
         transform = Crop(*args)
     elif name == "random_perspective":
@@ -754,18 +756,18 @@ def get_transform(name, args):
         transform = Random_HSV(*args)
         args = sum(args)
     elif name == "flip_ud":
-        transform = Flip_ud(args)
+        transform = Flip_ud(*args)
     elif name == "flip_lr":
-        transform = Flip_lr(args)
+        transform = Flip_lr(*args)
     
     elif name == "resize_padding":
         transform = Resize_padding(*args)
     elif name == "unsqueeze_coords":
         transform = Unsqueeze_coords()
     elif name == "filter":
-        transform = Filter(args)
+        transform = Filter(*args)
     elif name == "segment_to_task":
-        transform = Segment_to_task(args)
+        transform = Segment_to_task(*args)
     
     elif name == "batch":
         transform = Batch(*args)
