@@ -1,4 +1,4 @@
-path: ../datasets2/coco
+path: ../datasets/coco
 dirs:
   train: images/train2017
   val: images/val2017
@@ -88,7 +88,7 @@ classes:
   79: toothbrush
 
 urls: 
-  train: http://images.cocodataset.org/zips/train2017.zip,
-  val: http://images.cocodataset.org/zips/val2017.zip,
-  test: http://images.cocodataset.org/zips/test2017.zip,
+  train: http://images.cocodataset.org/zips/train2017.zip
+  val: http://images.cocodataset.org/zips/val2017.zip
+  test: http://images.cocodataset.org/zips/test2017.zip
   anno: http://images.cocodataset.org/annotations/annotations_trainval2017.zip

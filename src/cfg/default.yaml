@@ -7,27 +7,32 @@ data: coco
 epochs: 2
 close_mosaic: 1
 workers: 8
-batch_size: &batch_size 16
+batch_size: &batch_size 4
 cache: &cache False # need least 100G memory
 prefetch_size: 8
 shuffle: True
-image_shape: &image_shape [640, 640, 3]
+input_shape: &input_shape [640, 640, 3]
 constant: &constant 0 # (0-255) it can be list
+max_det: &max_det 300
+
+environment:
+  cpus: all
+  gpus: all
 
 augmentation:
-  mosaic: *image_shape # (image_shape)
-  random_perspective: [0, 0.1, 0.5, 0, 0] #(rotate(15), translate(0.1), scale(0.5), shear(0), perspective(0))
+  mosaic: [*input_shape] # (input_shape)
+  random_perspective: [0, 0.1, 0.5, 0, 0] #(rotate, translate, scale, shear, perspective)
   random_hsv: [0.15, 0.7, 0.4] # (+/- H, S, V)
-  flip_ud: 0.0 # (prob)
-  flip_lr: 0.5 # (prob)
+  flip_ud: [0.0] # (prob)
+  flip_lr: [0.5] # (prob)
 
 process:
-  resize_padding: [*image_shape, *constant, True] # (image_shape, constant, center)
-  unsqueeze_coords: True
-  filter: 0.02
-  segment_to_task: *task
+  resize_padding: [*input_shape, *constant, True] # (input_shape, constant, center)
+  unsqueeze_coords: [True]
+  filter: [0.02]
+  segment_to_task: [*task]
 
 postprocess:
-  batch: *task
-  normalize: True
+  batch: [*task, *max_det]
+  normalize: [True]
   

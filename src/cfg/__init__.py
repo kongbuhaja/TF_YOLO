@@ -1,6 +1,7 @@
 from pathlib import Path
 import yaml
 import os
+import re
 
 FILE = Path(__file__).resolve()
 PATH = FILE.parents[0]
@@ -9,36 +10,41 @@ DATASETS = PATH / "datasets"
 MODELS = PATH / "models"
 
 def yaml_load(file=PATH/"default.yaml"):
-    assert os.path.exists(file), f'Config error | unknown {file}'
+    assert os.path.exists(file), f"Config error | unknown file {file}"
     with open(file, encoding="utf-8") as f:
         cfg = yaml.safe_load(f.read())
     return cfg
 
 class Config():
     def __init__(self, **kwargs):
-        file = kwargs.get("file", DEFAULT)
-        for key, value in yaml_load(file).items():
-            setattr(self, key, value)
+        if kwargs.get("weight", False):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
         
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-            
-        if hasattr(self, "model"):
-            print(self.model)
-            file, scale, weight_file = _get_model_file(self.model)
-            self.model = Config(name=file.name.rstrip(".yaml"),
-                                file=file, 
-                                scale=scale,
-                                weight_file=weight_file,
-                                image_shape=self.image_shape)
+        else:
+            file = kwargs.get("file", DEFAULT)
 
-        if hasattr(self, "data"):
-            self.data = Config(file=DATASETS / f"{self.data}.yaml", 
-                               name=self.data)
-        
-            self.data.path = Path(self.data.path).resolve()
-            for key, value in self.data.dirs.items():
-                self.data.dirs[key] = self.data.path / value
+            for key, value in yaml_load(file).items():
+                setattr(self, key, value)
+            
+            for key, value in kwargs.items():
+                setattr(self, key, value)
+                
+            if hasattr(self, "model"):
+                file, scale, weight = _get_model_file(self.model)
+                self.model = Config(name=file.stem,
+                                    file=file, 
+                                    scale=scale,
+                                    weight=weight,
+                                    input_shape=self.input_shape)
+
+            if hasattr(self, "data"):
+                self.data = Config(file=DATASETS / f"{self.data}.yaml", 
+                                name=self.data)
+            
+                self.data.path = Path(self.data.path).resolve()
+                for key, value in self.data.dirs.items():
+                    self.data.dirs[key] = self.data.path / value
 
     def __repr__(self):
         text = ""
@@ -53,7 +59,7 @@ class Config():
             text += "\n"
         return text[:-1]
 
-def _get_model_file(path):
+def _get_model_file(file_name):
     def _get_all_files(path):
         files = {}
         for file in os.listdir(path):
@@ -61,45 +67,27 @@ def _get_model_file(path):
                 files.update(_get_all_files(path / file))
             elif os.path.isfile(path / file):
                 files[file] = (path / file)
-        print(files)
         return files
-
-    def check_file(file):
-        if os.path.exists(file):
-            pass
-        elif file.name in files:
-            _file = file
-            file = files[file.name]
-            if _file.parent.as_posix() != ".":
-                print(f"Config issue | Model file {_file} is not exist, so {file} is loaded.")
-        else:
-            file = None
-        return file
         
-    file = Path(path)
-    name, ext = file.stem, file.suffix
-    if ext != ".yaml":
-        weight_file = file
-        file = Path(name).with_suffix(".yaml")
-    else:
-        weight_file = None
+    file_path = Path(file_name)
+    model_name, ext = file_path.stem, file_path.suffix
+
+    if ext != ".yaml" and ext != "":
+        return file_path, None, True
 
     files = _get_all_files(MODELS)
+    
+    pattern = re.compile(r"^(.*)([nsmlx])$|^(.+)$")
+    match = pattern.match(model_name)
+    name, scale = (match.group(1), match.group(2)) if match.group(1) is not None else (match.group(3), None)
+    file = Path(name).with_suffix(".yaml").name
 
-    _file = check_file(file)
-    if _file:
-        file = _file
-        scale = None
+    if os.path.exists(file_path):
+        return file_path, scale, False
+    elif file in files:
+        return files[file], scale, False
     else:
-        name, scale = file.stem[:-1], file.stem[-1]
-        file = file.with_stem(name)
-        _file = check_file(file)
-        if _file:
-            file = _file
-        else:
-            assert False, f"Config error | Wrong model file: {path} ex) yolo11.yaml, yolo11.h5, /.../yolo11.yaml, /.../yolo11.h5"
-            
-    return file, scale, weight_file
+        raise FileNotFoundError(f"Model error | unknown model {file}")
 
 
 __all__ = (
