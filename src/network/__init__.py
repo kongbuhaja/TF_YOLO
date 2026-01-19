@@ -3,7 +3,7 @@ from src.network.module.layers import base_modules, fusion_modules, frozen_modul
 from src.network.module.blocks import repeat_modules
 from src.network.module.heads import head_modules
 
-all_modules = base_modules | repeat_modules | fusion_modules | frozen_modules | head_modules
+all_modules = base_modules | repeat_modules | fusion_modules | frozen_modules | head_modules | activations
 
 __all__ = (
     "base_modules",

@@ -1,36 +1,47 @@
 import math
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, MaxPool2D, Concatenate, Identity, UpSampling2D
+from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, MaxPool2D, Concatenate, UpSampling2D
 from tensorflow.keras.initializers import HeUniform
 from src.network.module.activations import *
 
 class Sequential(Layer):
     def __init__(self, *layers):
         super().__init__()
-        self.layers = layers
+        if len(layers) == 1 and not isinstance(layers[0], Layer):
+            self.layers = list(layers[0])
+        else:
+            self.layers = list(layers)
 
     def call(self, x, training=False):
         for layer in self.layers:
-            x = layer(x, training)
+            x = layer(x, training=training)
         return x
 
 class ModuleList(Layer):
-    def __init__(self, layers):
+    def __init__(self, layers=None):
         super().__init__()
-        self.layers = layers
+        self.layers = list(layers) if layers else []
         
     def __iter__(self):
         return iter(self.layers)
+    
+    def __getitem__(self, idx):
+        return self.layers[idx]
     
 class DFL(Layer):
     def __init__(self, reg_max=16):
         super().__init__()
         self.reg_max = reg_max
-        self.project = tf.reshape(tf.range(reg_max, dtype=tf.float32), [reg_max, 1])
-        
+        # self.project = tf.constant(tf.reshape(tf.range(reg_max, dtype=tf.float32), [reg_max, 1]))
+        # param 측정 때문에
+        self.project = tf.Variable(tf.reshape(tf.range(reg_max, dtype=tf.float32), [reg_max, 1]), trainable=False)
+
+
     def call(self, x, training=False):
-        b, a, _ = tf.shape(x)
+        shape = tf.shape(x)
+        b, a = shape[0], shape[1]
+        
         x = tf.reshape(x, [-1, 4, self.reg_max])
         x = tf.nn.softmax(x, axis=-1)
         x = x @ self.project
@@ -55,12 +66,12 @@ class UpSample(Layer):
 
 class Conv(Layer):
     default_act = activations["SiLU"]
-    def __init__(self, in_ch, out_ch, k=3, s=1, p="same", g=1, d=1, bias=True, bn=True, act=True):
+    def __init__(self, in_ch, out_ch, k=3, s=1, p="same", g=1, d=1, bn=True, act=True):
         super().__init__()
         self.conv = Conv2D(out_ch, k, s, p,
                            groups=g,
                            dilation_rate=d,
-                           use_bias=False if bn else bias,
+                           use_bias=False if bn else True,
                            kernel_initializer = HeUniform)
         # regulaizer는 고민해보자
         self.bn = BatchNormalization() if bn else Identity()
@@ -75,6 +86,13 @@ class Conv(Layer):
 
     def call(self, x, training=False):
         return self.act(self.bn(self.conv(x), training))
+
+class Identity(Layer):
+    def __init__(self):
+        super().__init__()
+
+    def call(self, x, training=False):
+        return x
 
 class Bottleneck(Layer):
     def __init__(self, in_ch, out_ch, shortcut=True, g=1, k=(3, 3), e=0.5):
@@ -109,7 +127,7 @@ class PSABlock(Layer):
     def __init__(self, ch, num_heads=4, attn_ratio=0.5, shortcut=True):
         super().__init__()
         self.attn = Attention(ch, num_heads, attn_ratio)
-        self.ffn = Sequential(*[Conv(ch, ch * 2, 1), Conv(ch * 2, ch, 1, act=False)])
+        self.ffn = Sequential([Conv(ch, ch * 2, 1), Conv(ch * 2, ch, 1, act=False)])
         self.add = shortcut
 
     def call(self, x, training=False):
@@ -125,7 +143,7 @@ class Attention(Layer):
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.key_dim = int(self.head_dim * attn_ratio)
-        self.scale  = self.key_dim**-0.5
+        self.scale = self.key_dim**-0.5
 
         qkv_dim = (self.key_dim * 2 + self.head_dim) * num_heads
         self.qkv = Conv(dim, qkv_dim, 1, act=False)
