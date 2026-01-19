@@ -2,14 +2,16 @@ from src.engine.handler import Handler
 from src.utils.metric import ap_per_class, box_iou, Metrics
 import numpy as np
 from tqdm import tqdm
+import tensorflow as tf
 
 class Validator(Handler):
-    def __init__(self, cfg, dataset):
-        super().__init__(cfg, dataset, "val")
+    def __init__(self, model, cfg, dataset):
+        super().__init__(model, cfg, dataset, "val")
         self.iouv = np.linspace(0.5, 0.95, 10)
         self.metric = Metrics(len(self.dataset.classes))
 
-    def __call__(self, model="test"):
+    def __call__(self, model=None):
+        model = self.model if model is None else model
         try:
             stats = {"tp": [],
                     "conf": [],
@@ -26,24 +28,24 @@ class Validator(Handler):
                     preds = self.test_model(batch_image, batch_labels)
                 else:
                     preds = model(batch_image)
-                for b, pred in enumerate(preds):
-                    labels = batch_labels[batch_labels[:, 0] == b]
-                    t_cls, t_boxes = labels[:, 1], labels[:, 2:]
-                    p_boxes, p_cls, conf = pred[:, :4], pred[:, 4], pred[:, 5]
+        #         for b, pred in enumerate(preds):
+        #             labels = batch_labels[batch_labels[:, 0] == b]
+        #             t_cls, t_boxes = labels[:, 1], labels[:, 2:]
+        #             p_boxes, p_cls, conf = pred[:, :4], pred[:, 4], pred[:, 5]
 
-                    iou = box_iou(t_boxes, p_boxes)
-                    tp = self.match(iou, t_cls, p_cls)
+        #             iou = box_iou(t_boxes, p_boxes)
+        #             tp = self.match(iou, t_cls, p_cls)
 
-                    stats["tp"].append(tp)
-                    stats["conf"].append(conf)
-                    stats["p_cls"].append(p_cls)
-                    stats["t_cls"].append(t_cls)
+        #             stats["tp"].append(tp)
+        #             stats["conf"].append(conf)
+        #             stats["p_cls"].append(p_cls)
+        #             stats["t_cls"].append(t_cls)
 
-            for key, value in stats.items():
-                stats[key] = np.concatenate(value, 0)
+        #     for key, value in stats.items():
+        #         stats[key] = np.concatenate(value, 0)
 
-            result = ap_per_class(stats["tp"], stats["conf"], stats["p_cls"], stats["t_cls"])
-            self.metric.update(result)
+        #     result = ap_per_class(stats["tp"], stats["conf"], stats["p_cls"], stats["t_cls"])
+        #     self.metric.update(result)
         finally:
             self.dataloader.on_epoch_end()
 

@@ -8,7 +8,8 @@ class Evaluator(Handler):
         for name, value in cfg.__dict__.items():
             setattr(self, name, value)
 
-    def __call__(self, model):
+    def __call__(self, model=None):
+        model = model if self.model is None else model
         try:
             preds_json_list = []
             is_new_gt = not self.dataset.check_gt()
