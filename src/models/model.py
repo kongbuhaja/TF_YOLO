@@ -1,95 +1,159 @@
 import os, math
+import tensorflow as tf
 from pathlib import Path
 from src.network import *
+import numpy as np
 
 class Model():
-    def __init__(self, file):
-        name, extension = file.split(".")
-        self.name = name
-        if extension == "yaml":
-            self.make_dir(name)
+    def __init__(self, cfg):
+        assert os.path.exists(cfg.file), f"Model error | unknown model {cfg.file}"
+        self.name = cfg.name + cfg.scale
+        self.weight = cfg.weight
+        self.input_shape = np.array(cfg.input_shape)
+        self.modules, self.info = parse_model(cfg)
+        self.build(self.input_shape)
 
-    def __call__(self, data):
-        pass
+    @tf.function
+    def __call__(self, data, training=False):
+        return self.forward(data, training)
 
-    def train(self):
-        self.make_dir(self.name)
-        pass
+    def build(self, input_shape):
+        input_shape = [1, *input_shape] if len(input_shape)==3 else input_shape
+        dummy_data = tf.zeros(input_shape)
+        self.forward(dummy_data)
 
-    def eval(self):
-        self.make_dir("eval")
-        pass
+    def forward(self, x, training=False):
+        y = []
+        for module in self.modules:
+            if module.f != -1:
+                x = y[module.f] if isinstance(module.f, int) else [y[f] for f in module.f]
+            x = module(x, training)
+            y.append(x)
+        return x
 
     def make_dir(self, name):
         path = Path.cwd().resolve() / "results"
         os.makedirs(path, exist_ok=True)
         n = sum([d.startswith(name) for d in os.listdir(path)])
         self.path = path / f"{name}{n}"
-        os.makedirs(self.path)
+        os.makedirs(self.path, exist_ok=True)
+
+    def extract_info(self):
+        def count_params(module):
+            params = 0
+            for v in module.variables:
+                if v.trainable:
+                    params += np.size(v)
+                else:
+                    if "moving_mean" in v.name or "moving_variance" in v.name:
+                        continue
+                    params += np.size(v)
+            return params
+        indices = ["Idx"]
+        froms = ["From"]
+        repeats = ["Repeat"]
+        params = ["Params"]
+        modules = ["Module"]
+        args = ["Args"]
+
+        for module, arg in zip(self.modules, self.info["args"]):
+            indices.append(str(module.idx))
+            froms.append(str(module.f).strip("()"))
+            repeats.append(str(module.r))
+            params.append(str(count_params(module)))
+            modules.append(str(".".join(module.__repr__().split(" ")[0].split(".")[-1:])))
+            args.append(str(arg))
+
+
+        def get_length(target):
+            # return int(np.ceil(max(len(x) for x in target)/5)*5)
+            return max(len(x) for x in target)
+        sheet = [indices, froms, repeats, params, modules, args]
+        lengths = [get_length(indices), get_length(froms), get_length(repeats),
+                   get_length(params), get_length(modules), get_length(args)]
+        return sheet, lengths
+            
+    def summary(self, step="    "):
+        sheet, lengths = self.extract_info()
+
+        head = "📢 Model Summary"
+        length = sum(lengths) + len(step)*(len(lengths)-1)
+        print("="*length)
+        print(" "*((length-len(head))//2) + head)
+        print("="*length)
+        
+        for cols in zip(*sheet):
+            print(step.join([f"{data:<{length}}" for data, length in zip(cols, lengths)]))
 
 class Empty_model():
     def __call__(self, data):
         return data
     
 def parse_model(cfg):
-    name = cfg.file.name.rstrip(".yaml")
-    print(name)
-    scale = cfg.scale if cfg.scale is not None else list(cfg.scales.keys())[0]
-    depth, width, max_channel = cfg.scales[scale]
-    layers = []
-    source_ch = getattr(cfg, "ch", getattr(cfg, "channel", 3))
-    channels, strides = [], []
+    cfg.scale  = cfg.scale if cfg.scale is not None else list(cfg.scales.keys())[0]
+    depth, width, max_channel = cfg.scales[cfg.scale ]
+    source_ch = getattr(cfg, "input_shape", [3])[-1]
+    is_torch = cfg.file.parents[1].name == "torch"
 
-    for i, (f, r, m, args) in enumerate(cfg.backbone + cfg.head): # [from, repeats, module, args]
+    layers, channels, strides, indices, args = [], [], [], [], []
+    for idx, (f, r, m, arg) in enumerate(cfg.backbone + cfg.head): # [from, repeats, module, args]
         r = max(round(r * depth), 1)
-
-        module = m.lower()
-        idx = module.rfind(".")
-        if idx:
-            package, module = module[:idx], module[idx+1:]
-            if package == "nn":
-                if frozen_modules[module] == frozen_modules["upsample"]:
-                    args = args[1:]
+        
+        module = m.lower().split(".")[-1]
+        assert module in all_modules.keys(), f"{module} is wrong module"
 
         if isinstance(f, list):
-            in_ch = [channels[fn] for fn in f] if channels else [ch for ch in source_ch]
-            stride = [strides[fn] for fn in f] if strides else [1 for _ in source_ch]
+            in_ch = tuple(channels[fn] for fn in f) if channels else tuple(ch for ch in source_ch)
+            stride = tuple(strides[fn] for fn in f) if strides else tuple(1 for _ in source_ch)
+            f = tuple(indices[fn] for fn in f) if indices else tuple(-1 for fn in f)
         else:
             in_ch = channels[f] if channels else source_ch
             stride = strides[f] if strides else 1
+            f = indices[f] if indices else -1
 
         if module in (base_modules | repeat_modules).keys():
-            out_ch = make_divisible(min(args[0], max_channel) * width, 8)
-            args = [in_ch, out_ch, *args[1:]]
-            if module == "conv" and args[3] == 2:
+            out_ch = make_divisible(min(arg[0], max_channel) * width, 8)
+            arg = [in_ch, out_ch, *arg[1:]]
+            if module == "conv" and arg[3] == 2:
                 stride *= 2
                 
             if module in repeat_modules.keys():
-                args.insert(2, r)
+                arg.insert(2, r)
                 r = 1
 
         elif module in fusion_modules.keys():
             if module == "concat":
+                if is_torch:
+                    arg[0] -= 2 if arg[0] == 1 else -1
+
                 out_ch = sum(in_ch)
                 stride = stride[0]
 
         elif module in frozen_modules.keys():
             if module == "upsample":
-                stride /= 2
+                if len(arg):
+                    arg.pop(0)
+                stride //= 2
             out_ch = in_ch
 
         elif module in head_modules.keys():
             assert hasattr(cfg, "nc"), "Please set nc in your model.yaml."
             if module == "detect": # 버전별로 detect면 원래의 detect로 하고 dfl_detect면 dfl_detect로
                 module = "dfl_detect"
-            args = [in_ch, getattr(cfg, "nc"), stride]
+            arg = [in_ch, getattr(cfg, "nc"), stride]
             out_ch = cfg.nc
 
+        module = all_modules[module](*arg)
+        module.idx, module.f, module.r = idx, f, r
+        indices.append(idx)
+        layers.append(module)
         channels.append(out_ch)
         strides.append(stride)
-        layers.append([[i, module, r, args] for _ in range(r)])
+        args.append(arg)
         
-    return layers, [source_ch] + channels, [1] + strides
+    info = {"args": args}
+        
+    return layers, info
 
 def make_divisible(x, div):
     return math.ceil(x / div) * div
