@@ -43,4 +43,6 @@ RUN echo "== Install Dev Tools ==" &&\
     pyyaml \
     numpy \
     scipy \
-    pycocotools
+    pycocotools \
+    psutil \
+    pynvml
