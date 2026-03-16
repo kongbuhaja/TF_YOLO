@@ -1,44 +1,28 @@
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 import tensorflow as tf
-from src.utils.draw import Painter
-from src.utils.metric import Metrics
-
-__all__ = (
-    "Painter",
-    "Metrics",
-    "Env",
-)
+import psutil, pynvml
 
 class Env():
     def __init__(self, cfg):
-        self.cpu_set(cfg["cpus"])
-        self.gpu_set(cfg["gpus"])
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
+        self.info = {
+            "cpu": {},
+            "gpu": {}
+        }
+        
+        self.cpu_set(cfg.cpus)
+        self.gpu_set(cfg.gpus)
+        
+        self.update_info()
+        
         self.summary()
 
-    def gpu_set(self, gpus):
-        all_gpus = tf.config.list_physical_devices("GPU")
-        try:
-            if gpus == "all":
-                selected_gpus = all_gpus
-            elif not gpus:
-                selected_gpus = []
-            elif isinstance(gpus, int):
-                selected_gpus = [all_gpus[gpus]]
-            else:
-                selected_gpus = [all_gpus[i] for i in gpus]
-
-            tf.config.set_visible_devices(selected_gpus, "GPU")
-            for gpu in selected_gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-
-        except RuntimeError as e:
-            print(e)
-
     def cpu_set(self, cpus):
+        all_cpus = os.cpu_count()
         if isinstance(cpus, str):
             if cpus == "all":
-                cpus = f"0-{os.cpu_count()-1}"
+                cpus = f"0-{all_cpus-1}"
             cpus = [cpus]
         
         cpu_set = set()
@@ -52,78 +36,205 @@ class Env():
             elif isinstance(part, str):
                 cpu_set.add(int(part))
 
+        self.activate_cpus = cpu_set
+
         try:
             os.sched_setaffinity(0, cpu_set)
-        except AttributeError as e:
-            print(e)
+        except AttributeError:
+            pass
         
         num_cores = len(cpu_set)
-        tf.config.threading.set_intra_op_parallelism_threads(num_cores)
-        tf.config.threading.set_inter_op_parallelism_threads(num_cores)
-    
+        if num_cores > 0:
+            tf.config.threading.set_intra_op_parallelism_threads(num_cores)
+            tf.config.threading.set_inter_op_parallelism_threads(num_cores)
+
+        allowed_count = len(self.activate_cpus)
+        allowed_str = self._elements_to_range(self.activate_cpus)
+
+        self.info["cpus"] = {
+            "physical_cores": all_cpus,
+            "active_cores_range": allowed_str,
+            "active_cores_count": allowed_count,
+            "usage": self._get_cpu_usage(interval=0.1),
+            "temperature": self._get_cpu_temperature()
+        }
+
+    def gpu_set(self, gpus):
+        pynvml.nvmlInit()
+        all_gpus = tf.config.list_physical_devices("GPU")
+        try:
+            if gpus == "all":
+                selected_gpus = all_gpus
+            elif not gpus: # None or empty
+                selected_gpus = []
+            elif isinstance(gpus, int):
+                selected_gpus = [all_gpus[gpus]]
+            else:
+                selected_gpus = [all_gpus[i] for i in gpus]
+
+            tf.config.set_visible_devices(selected_gpus, "GPU")
+            for gpu in selected_gpus:
+                tf.config.experimental.set_memory_growth(gpu, True)
+
+            physical_gpus = tf.config.list_physical_devices('GPU')
+            visible_gpus = tf.config.get_visible_devices('GPU')
+            logical_gpus = tf.config.list_logical_devices('GPU')
+            
+            phys_to_log_map = {}
+            for p_dev, l_dev in zip(visible_gpus, logical_gpus):
+                phys_to_log_map[p_dev.name] = l_dev
+
+            gpus_data = self._get_gpus_data()
+            capacity = 0.0
+            
+            data = dict()
+            for i, p_gpu in enumerate(physical_gpus):
+                gpu_data = gpus_data.get(i, {})
+
+                total_mem = gpu_data.get("total_mem", 0.0) # MiB
+                current_mem = gpu_data.get("used_mem", 0.0) # MiB
+                temp = gpu_data.get("temp", 0)
+                model_name = gpu_data.get("name", "Unknown GPU")
+
+                capacity += total_mem
+                usage = (current_mem / total_mem * 100) if total_mem > 0 else 0.0
+
+                is_activate = False
+                tf_device_name = "(Disabled)"
+
+                if any(p_gpu.name == v.name for v in visible_gpus):
+                    is_activate = True
+                    if p_gpu.name in phys_to_log_map:
+                        l_dev = phys_to_log_map[p_gpu.name]
+                        tf_device_name = l_dev.name
+                
+                data[i] = {"id":i,
+                           "is_activate": is_activate,
+                           "tf_name": tf_device_name,
+                           "model_name": model_name,
+                           "used_mem_mb": current_mem,
+                           "total_mem_mb": total_mem,
+                           "usage": usage,
+                           "temperature": temp}
+                
+            self.info["gpus"] = {"physical_count": len(physical_gpus),
+                                 "logical_count": len(logical_gpus),
+                                 "capacity": capacity,
+                                 "data": data}
+
+        except RuntimeError as e:
+            print(f"[Env Error] GPU Setup failed: {e}")
+
+    def update_info(self):
+        self._update_cpu_info()
+        self._update_gpu_info()
+
+    def _get_cpu_temperature(self):
+        if psutil is None:
+            return "N/A (Install psutil)"
+        
+        try:
+            temps = psutil.sensors_temperatures()
+            if not temps:
+                return "N/A"
+            
+            max_temp = 0.0
+            found = False
+            for name, entries in temps.items():
+                for entry in entries:
+                    if hasattr(entry, 'current') and entry.current:
+                        max_temp = max(max_temp, entry.current)
+                        found = True
+            
+            return f"{max_temp:.1f}" if found else "N/A"
+        except Exception:
+            return "N/A"
+
+    def _update_cpu_info(self):
+        self.info["cpus"]["usage"] = self._get_cpu_usage()
+        self.info["cpus"]["temperature"] = self._get_cpu_temperature()
+
+    def _update_gpu_info(self):
+        physical_gpus = tf.config.list_physical_devices('GPU')
+
+        gpus_data = self._get_gpus_data()
+
+        for i, p_gpu in enumerate(physical_gpus):
+            gpu_data = gpus_data.get(i, {})
+            
+            total_mem = gpu_data.get("total_mem", 0.0) # MiB
+            current_mem = gpu_data.get("used_mem", 0.0) # MiB
+            temp = gpu_data.get("temp", 0)
+            
+            usage = (current_mem / total_mem * 100) if total_mem > 0 else 0.0
+            
+            self.info["gpus"]["data"][i]["current_mem"] = current_mem
+            self.info["gpus"]["data"][i]["usage"] = usage
+            self.info["gpus"]["data"][i]["temp"] = temp
+
+    def _get_gpus_data(self):      
+        data = {}
+        device_count = pynvml.nvmlDeviceGetCount()
+        for i in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+
+            try:
+                temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            except:
+                temp = 0
+            name = pynvml.nvmlDeviceGetName(handle)
+            if isinstance(name, bytes):
+                name = name.decode("utf-8")
+            
+            data[i] = {"total_mem": mem_info.total / (1024**2),
+                        "used_mem": mem_info.used / (1024**2),
+                        "temp": temp,
+                        "name": name
+            }
+            
+        return data
+
     def summary(self):
+        cpus_info = self.info["cpus"]
+        gpus_info = self.info["gpus"]
+        
         head = "📢 Hardware Setting Summary"
-        length = 80
+        length = 90
+        
         print("="*length)
         print(" "*((length-len(head))//2) + head)
         print("="*length)
-        self.cpu_summary()
-        self.gpu_summary()
-        print("="*length + "\n")
-
-    def cpu_summary(self):
-        print(f"[CPU Info]")
-        total_physical_cores = os.cpu_count()
-        print(f"  - System Physical Cores : {total_physical_cores}")
-
-        try:
-            affinity = os.sched_getaffinity(0)
-            allowed_count = len(affinity)
-            allowed_str = self.elements_to_range(affinity)
-            print(f"  - ✅ Active Cores (Affinity) : {allowed_str} (Total: {allowed_count})")
-        except AttributeError:
-            print("  - Active Cores : (os.sched_getaffinity not supported on this OS)")
-
-    def gpu_summary(self):
-        print(f"\n[GPU Info]")
-        physical_gpus = tf.config.list_physical_devices('GPU')
-        logical_gpus = tf.config.list_logical_devices('GPU')
-
-        print(f"  - Physical GPUs Detected : {len(physical_gpus)}")
-        print(f"  - ✅ Logical GPUs (Visible): {len(logical_gpus)}")
-
-        def get_gpu_total_memory_map():
-            import subprocess
-            try:
-                # nvidia-smi로 전체 메모리 조회 (단위: MiB)
-                result = subprocess.check_output(
-                    ["nvidia-smi", "--query-gpu=index,memory.total", "--format=csv,noheader,nounits"],
-                    encoding="utf-8"
-                )
-                memory_map = {}
-                for line in result.strip().split('\n'):
-                    idx, mem = line.split(',')
-                    memory_map[int(idx)] = float(mem.strip())
-                return memory_map
-            except (FileNotFoundError, subprocess.CalledProcessError):
-                return {}
-            
-        total_mem_map = get_gpu_total_memory_map()
-
-        if logical_gpus:
-            for i, gpu in enumerate(logical_gpus):
-                try:
-                    mem_info = tf.config.experimental.get_memory_info(gpu.name)
-                    current_mem = mem_info['current'] / (1024**2)
-                    total_mem = total_mem_map.get(i, 0.0)
-                    ratio = (current_mem / total_mem) * 100
-                    print(f"    Target {i}: {gpu.name} | Mem Usage: {current_mem:.1f}MB / {total_mem:.1f}MB ({ratio:.1f}%))")
-                except:
-                    print(f"    Target {i}: {gpu.name}")
+        
+        # [CPU Info]
+        print("[CPUs Info]")
+        temp_str = f"{cpus_info['temperature']}°C" if cpus_info['temperature'] != "N/A" else "N/A"
+        print(f"  - System Physical Cores : {cpus_info['physical_cores']}")
+        print(f"  - Activate Cores (Affinity) : {cpus_info['active_cores_range']} (Total: {cpus_info['active_cores_count']}) | Temp: {temp_str}")
+        
+        # [GPU Info]
+        print("\n[GPUs Info]")
+        print(f"  - Physical GPUs Detected : {gpus_info['physical_count']}")
+        print(f"  - Logical GPUs (Visible): {gpus_info['logical_count']}")
+        
+        if gpus_info["data"]:
+            for gpu_info in gpus_info["data"].values():
+                print(f"    Target {gpu_info['id']}: {gpu_info['model_name']} ({gpu_info['tf_name']})")
+                
+                if gpu_info['is_activate']:
+                    status_icon = "✅"
+                    mem_str = f"{gpu_info['used_mem_mb']:.1f}MB / {gpu_info['total_mem_mb']:.1f}MB ({gpu_info['usage']:.1f}%)"
+                else:
+                    status_icon = "❌"
+                    mem_str = "Disabled (0.0MB Used)"
+                
+                print(f"      - {status_icon} Mem Usage: {mem_str} | Temp: {gpu_info['temperature']}°C")
         else:
             print("    (Running on CPU Mode)")
+            
+        print("="*length + "\n")
 
-    def elements_to_range(self, elements):
+    def _elements_to_range(self, elements):
         if not elements: return "None"
         cpus = sorted(list(elements))
         ranges = []
@@ -145,3 +256,29 @@ class Env():
             ranges.append(f"{start}-{prev}")
             
         return ", ".join(ranges)
+    
+    def _get_cpu_usage(self, interval=None):
+        try:
+            per_core_usages = psutil.cpu_percent(interval=interval, percpu=True)
+            max_core_idx = len(per_core_usages) - 1
+            allowed_usages = [per_core_usages[i] for i in self.activate_cpus if i <= max_core_idx]
+
+            if allowed_usages:
+                return sum(allowed_usages) / len(allowed_usages)
+            return 0.0
+        except Exception:
+            return 0.0
+    
+    def _get_gpu_usage(self, is_percent=False):
+        total_used_MB = 0
+        
+        for data in self.info["gpus"]["data"].values():
+            total_used_MB += data["current_mem"]
+        
+        if is_percent:
+            return f"{total_used_MB / self.info['gpus']['capacity'] / 1024:.1f}%"
+        else:
+            return f"{total_used_MB/1024:.1f}/{self.info['gpus']['capacity']/1024:.1f}G"
+        
+    def __del__(self):
+        pynvml.nvmlShutdown()

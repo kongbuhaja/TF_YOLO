@@ -1,47 +1,50 @@
 from src.data.dataset import Dataset
 import numpy as np
-from src.data.process import Process, Augmentation
+from src.data.process import Process
 from threading import Thread
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from copy import deepcopy
-import logging
+import logging, traceback
 
 class Dataloader():
-    def __init__(self, cfg, data=None):
-        for name, value in cfg.__dict__.items():
-            setattr(self, name, value)
+    def __init__(self, cfg, data):
+        # for name, value in cfg.items():
+        #     setattr(self, name, value)
         self.epoch = 0
-        self.close_mosaic = self.epochs - self.close_mosaic + 1
-
+        self.close_mosaic = cfg.epochs - cfg.close_mosaic + 1
+        self.batch_size = cfg.batch_size
+        self.prefetch_size = cfg.prefetch_size
+        self.shuffle = cfg.shuffle
+        self.workers = cfg.workers
+        
         self._executor = None
         self._prefetch_thread = None
         self._batch_queue = None
 
+        self.insert_data(cfg.copy(), data)
 
-        if data:
-            self.insert_data(data)
-
-    def insert_data(self, data):
-        self.dtype = data["dtype"]
+    def insert_data(self, cfg, data):
+        self.split = data["split"]
         self.data = data["data"]
         self.indices = np.arange(len(self.data))
 
         # process
         preprocess = Process({"read_image": True})
-
-        if self.dtype == "train" or self.dtype == "val":
-            process = Process(self.augmentation) + Process(self.process)
-        elif self.dtype == "val":
-            process = Process(self.process)
-        else:
+        
+        process = Process({"resize_padding": [cfg.input_shape, cfg.constant]})
+        if self.split == "train":
+            process = Process(cfg.augmentation) + process
+        elif self.split == "eval":
             self.batch_size = 1
-            process = Process({"resize_padding_with_info": self.process["resize_padding"][:2],
-                               "unsqueeze_coords": self.process["unsqueeze_coords"],
-                               "segment_to_task": self.process["segment_to_task"]})
+            process = Process({"resize_padding_with_info": [cfg.input_shape, cfg.constant]})
+        process += Process(cfg.process)
+
+        if self.split != "train":
+            process.filter.ratio = 0 
             
         self.process_pipeline = preprocess + process
-        self.postprocess_pipeline = Process(self.postprocess)
+        self.postprocess_pipeline = Process(cfg.postprocess)
 
     def __len__(self):
         return int(np.ceil(len(self.indices) / self.batch_size))
@@ -64,8 +67,10 @@ class Dataloader():
             batch_data = self._process_batch(batch_indices)
 
         if isinstance(batch_data, Exception):
-            logging.error(f"Batch error, fallback: {batch_data}")
+            logging.error(f"Batch error occurred! Stopping iteration.")
+            self.on_epoch_end()
             raise StopIteration
+        
         self.idx += 1
 
         return batch_data
@@ -78,18 +83,25 @@ class Dataloader():
                 batch_indices = self.indices[start_idx:end_idx].tolist()
                 batch_data = self._process_batch(batch_indices)
                 
-                if not self._stop_signal:
-                    self._batch_queue.put(batch_data, timeout=5)
-                    self.prefetch_idx += 1
+                while not self._stop_signal:
+                    try:
+                        self._batch_queue.put(batch_data, timeout=5)
+                        self.prefetch_idx += 1
+                        break
+                    except Full:
+                        continue
 
             except Exception as e:
-                logging.error(f"Prefetch worker error: {e}")
-                self._batch_queue.put(e)
+                logging.error(f"Prefetch worker error:\n{traceback.format_exc()}")
+                try:
+                    self._batch_queue.put(e, timeout=5)
+                except:
+                    pass
                 break
 
     def _process_batch(self, batch_indices):
         try:            
-            if getattr(self.process_pipeline, "use_mosaic", False):
+            if hasattr(self.process_pipeline, "mosaic"):
                 sample_indices = [[idx] + np.random.choice(self.indices, 3).tolist() for idx in batch_indices]
                 batch_data = [[self.data[idx].copy() for idx in indices] for indices in sample_indices]
             else:
@@ -100,17 +112,16 @@ class Dataloader():
                 processed_data = [future.result() for future in futures]
             else:
                 processed_data = [self.process_pipeline(data) for data in batch_data]
-            
-            final_data = self.postprocess_pipeline(processed_data)
 
-            return final_data
+            batch_data = self.postprocess_pipeline(processed_data)
+            return batch_data
         
         except Exception as e:
-            logging.error(f"Error processing batch: {e}")
+            logging.error(f"Error processing batch: \n{traceback.format_exc()}")
             return e
     
     def _choose_executor(self):
-        use_processes = getattr(self.process_pipeline, "use_mosaic", False) and self.workers > 2
+        use_processes = hasattr(self.process_pipeline, "mosaic") and self.workers > 2
         if use_processes:
             return ProcessPoolExecutor(max_workers=self.workers)
         return ThreadPoolExecutor(max_workers=self.workers)
@@ -120,7 +131,7 @@ class Dataloader():
         self.prefetch_idx = 0
         self.epoch += 1
         
-        if self.dtype == "train" or self.dtype == "val":
+        if self.split == "train":
             if self.shuffle:
                 np.random.shuffle(self.indices)
             if self.epoch == self.close_mosaic:

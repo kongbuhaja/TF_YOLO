@@ -5,8 +5,6 @@ from tqdm import tqdm
 class Evaluator(Handler):
     def __init__(self, cfg, dataset):
         super().__init__(cfg, dataset, "eval")
-        for name, value in cfg.__dict__.items():
-            setattr(self, name, value)
 
     def __call__(self, model=None):
         model = model if self.model is None else model

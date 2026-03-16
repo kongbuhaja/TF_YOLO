@@ -9,19 +9,19 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class Dataset():
     def __init__(self, cfg):
-        for key, value in cfg.__dict__.items():
+        for key, value in cfg.items():
             setattr(self, key, value)
 
-    def load(self, dtype, cache, workers):
-        dtype = dtype.lower()
-        assert dtype in ["train", "val", "eval", "test"], "only support [train, val, test]"
+    def load(self, split, cache, workers):
+        split = split.lower()
+        assert split in ["train", "val", "eval", "test"], "only support [train, val, test]"
         
         self.util = utils[self.name]()
         if not os.path.exists(self.path):
             self.util.download(self.path, self.urls, self.dirs, workers)
         
-        data = self.read_data(dtype, cache, workers)
-        data["dtype"] = dtype
+        data = self.read_data(split, cache, workers)
+        data["split"] = split
         return data
     
     def check_gt(self):
@@ -63,12 +63,12 @@ class Dataset():
     def eval_metric(self, pred_json_path):
         self.util.eval_metric(self.dirs["eval"], pred_json_path)
 
-    def read_data(self, dtype, cache, workers):
+    def read_data(self, split, cache, workers):
         self.cache = cache
         data = []
 
-        _dtype = "val" if dtype == "eval" else dtype
-        image_dir = self.dirs[_dtype]
+        _split = "val" if split == "eval" else split
+        image_dir = getattr(self.dirs, _split)
         if not image_dir.exists():
             raise FileNotFoundError(f"{image_dir} does not exist.")
 
@@ -82,13 +82,13 @@ class Dataset():
                 
                 for it in tqdm(as_completed(futures),
                                total=total,
-                               desc=f"Reading data for {dtype}"):
+                               desc=f"Reading data for {split}"):
                     results.append(it.result())
         
         else:
             for image_file in tqdm(image_files,
                                    total=total,
-                                   desc=f"Reading data for {dtype}"):
+                                   desc=f"Reading data for {split}"):
                 results.append(self.read_file(image_dir, image_file))
         
         data = [r for r in results if r is not None]
@@ -97,7 +97,7 @@ class Dataset():
 
         self.category_map = self.read_category_map()
 
-        return {"data": data, "dtype": dtype, "category_map": self.category_map}
+        return {"data": data, "split": split, "category_map": self.category_map}
     
     def read_file(self, image_dir, image_file):
         image_file = image_dir / image_file

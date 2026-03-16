@@ -2,16 +2,14 @@ import numpy as np
 import cv2
 
 class Process():
-    def __init__(self, cfg=dict()):
+    def __init__(self, cfg=None):
         self.transforms = []
         if cfg is not None:
             for name, args in cfg.items():
                 transform, flag = get_transform(name, args)
                 if flag:
-                    setattr(self, name, transform)
+                    setattr(self, transform.name, transform)
                     self.transforms.append(transform)
-        if hasattr(self, "mosaic"):
-            self.use_mosaic = True
 
     def __call__(self, data):
         for transform in self.transforms:
@@ -20,15 +18,10 @@ class Process():
     
     def __add__(self, other):
         if isinstance(other, Process):
-            for name, value in other.__dict__.items():
-                if hasattr(self, name):
-                    s_value = getattr(self, name)
-                    if isinstance(s_value, list):
-                        setattr(self, name, s_value + value)
-                    else:
-                        setattr(self, name, value)
-                else:
-                    setattr(self, name, value)
+            self.transforms.extend(other.transforms)
+            for key, value in other.__dict__.items():
+                if isinstance(value, Transform):
+                    setattr(self, key, value)
             return self
         else:
             return NotImplemented
@@ -42,22 +35,7 @@ class Process():
     def close_mosaic(self):
         if hasattr(self, "mosaic"):
             self.transforms.remove(self.mosaic)
-            self.use_mosaic = False
-    
-class Augmentation(Process):
-    def __init__(self, cfg):
-        super().__init__(cfg)
-        self.use_mosaic = hasattr(self, "mosaic")
-
-    def __call__(self, data):
-        for transform in self.transforms:
-            data = transform(data)
-        return data
-
-    def close_mosaic(self):
-        if hasattr(self, "mosaic"):
-            self.transforms.remove(self.mosaic)
-            self.use_mosaic = False
+            del self.mosaic
 
 class Transform():
     def __init__(self):
@@ -69,6 +47,10 @@ class Transform():
     def apply(self, data):
         return data
     
+    @property
+    def name(self):
+        return self.__class__.__name__.lower()
+
     def __repr__(self):
         return self.__class__.__name__
 
@@ -96,12 +78,15 @@ class Read_image(Transform):
             if isinstance(data[0]["image"], np.ndarray):
                 return data
             for i in range(len(data)):
-                data[i]["image"] = cv2.imread(data[i]["image"])[:,:, ::-1]
+                data[i]["image"] = self.read(data[i]["image"])
         elif isinstance(data, dict):
-            if isinstance(data["image"], np.ndarray):
+            if isinstance(data[0]["image"], np.ndarray):
                 return data
-            data["image"] = cv2.imread(data["image"])[:,:, ::-1]
+            data["image"] = cv2.imread(data["image"])
         return data
+    
+    def read(self, path):
+        return cv2.imread(path)[..., ::-1]
 
 # augmentation
 class Mosaic(Transform):
@@ -140,7 +125,7 @@ class Mosaic(Transform):
                 (0, cy, cx, self.mosaic_size[1]), 
                 (cx, cy, *(self.mosaic_size))]
         
-        mosaic_image_id = ""
+        mosaic_image_id = []
         mosaic_image = np.zeros((*(self.mosaic_size), 3), np.uint8)
         mosaic_class_ids = []
         mosaic_coords = []
@@ -155,13 +140,13 @@ class Mosaic(Transform):
 
             mult = np.array([new_w, new_h], np.float32) / self.div
             add = np.array([x,y], np.float32) / self.div
-            mosaic_image_id += f"{data['image_id']}_"
+            mosaic_image_id.append(str(data['image_id']))
             mosaic_image[y:y + new_h, x:x + new_w] = cv2.resize(data["image"], (new_w, new_h))
             mosaic_class_ids.append(data["class_ids"])
             mosaic_coords.append(data["coords"] * mult + add)
             mosaic_lengths.append(data["lengths"])
         
-        data = {"image_id": mosaic_image_id[:-1],
+        data = {"image_id": "_".join(mosaic_image_id),
                 "image": mosaic_image,
                 "class_ids": np.hstack(mosaic_class_ids),
                 "coords": np.vstack(mosaic_coords),
@@ -500,6 +485,7 @@ class Filter(Transform):
         inputs:
             ratio: ratio for filater size
         """
+        self.unsqueeze = Unsqueeze_coords()
         self.ratio = np.array(ratio)
     
     def apply(self, data):
@@ -515,17 +501,23 @@ class Filter(Transform):
                 new_class_ids: np.array(nm,)
                 new_coords: [np.array(nn_1, 2), np.array(nn_2, 2), ..., np.array(nn_nm, 2)]
         """
-        size = data["image"].shape[:2][::-1]
-        filter_size = self.ratio * size
+        data = self.unsqueeze(data)
 
-        if len(data["coords"]) == 0:
-            data["coords"] = []
-        
-        else:
+        if self.ratio:
+            if len(data["coords"]) == 0:
+                data["coords"] = []
+
+            size = data["image"].shape[:2][::-1]
+            if (self.ratio > 1.0).any():
+                size = np.array(data["image"].shape[:2][::-1], dtype=np.float32)
+                threshold = self.ratio / size
+            else:
+                threshold = self.ratio
+            
             mins = np.array([coord.min(axis=0) for coord in data["coords"]])
             maxs = np.array([coord.max(axis=0) for coord in data["coords"]])
             
-            mask = ((maxs - mins) * size > filter_size).all(axis=-1)
+            mask = ((maxs - mins) > threshold).all(axis=-1)
 
             data["class_ids"] = data["class_ids"][mask]
             data["coords"] = [data["coords"][i] for i in np.flatnonzero(mask)]
@@ -778,5 +770,6 @@ def get_transform(name, args):
         transform = Resize_padding_with_info(*args)
     else:
         transform = None
+        args = False
 
     return transform, bool(args)

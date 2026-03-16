@@ -4,25 +4,19 @@ from pathlib import Path
 from src.network import *
 import numpy as np
 
-class Model():
+class Model(tf.keras.Model):
     def __init__(self, cfg):
         assert os.path.exists(cfg.file), f"Model error | unknown model {cfg.file}"
-        self.name = cfg.name + cfg.scale
+        super().__init__()
+        self.model_name = cfg.name + cfg.scale
         self.weight = cfg.weight
-        self.input_shape = np.array(cfg.input_shape)
+        # self._input_shape = np.array(cfg.input_shape)
         self.modules, self.info = parse_model(cfg)
-        self.build(self.input_shape)
+        self.build([1, *cfg.input_shape])
+        self.initialize_bias()
 
-    @tf.function
-    def __call__(self, data, training=False):
-        return self.forward(data, training)
-
-    def build(self, input_shape):
-        input_shape = [1, *input_shape] if len(input_shape)==3 else input_shape
-        dummy_data = tf.zeros(input_shape)
-        self.forward(dummy_data)
-
-    def forward(self, x, training=False):
+    def call(self, x, normalize=True, training=False):
+        x = self.normalize(x) if normalize else x
         y = []
         for module in self.modules:
             if module.f != -1:
@@ -30,13 +24,14 @@ class Model():
             x = module(x, training)
             y.append(x)
         return x
-
-    def make_dir(self, name):
-        path = Path.cwd().resolve() / "results"
-        os.makedirs(path, exist_ok=True)
-        n = sum([d.startswith(name) for d in os.listdir(path)])
-        self.path = path / f"{name}{n}"
-        os.makedirs(self.path, exist_ok=True)
+    
+    def normalize(self, x):
+        return tf.cast(x, tf.float32) / 255.0
+    
+    def initialize_bias(self):
+        for module in self.modules:
+            if hasattr(module, "initialize_bias"):
+                module.initialize_bias()
 
     def extract_info(self):
         def count_params(module):
@@ -62,7 +57,7 @@ class Model():
             repeats.append(str(module.r))
             params.append(str(count_params(module)))
             modules.append(str(".".join(module.__repr__().split(" ")[0].split(".")[-1:])))
-            args.append(str(arg))
+            args.append(str(list(arg)))
 
 
         def get_length(target):
@@ -91,7 +86,7 @@ class Empty_model():
     
 def parse_model(cfg):
     cfg.scale  = cfg.scale if cfg.scale is not None else list(cfg.scales.keys())[0]
-    depth, width, max_channel = cfg.scales[cfg.scale ]
+    depth, width, max_channel = getattr(cfg.scales, cfg.scale, "n")
     source_ch = getattr(cfg, "input_shape", [3])[-1]
     is_torch = cfg.file.parents[1].name == "torch"
 

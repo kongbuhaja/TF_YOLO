@@ -1,7 +1,6 @@
 import tensorflow as tf
-from src.utils.util import make_anchors, stop_gradient
+from src.utils.util import make_anchors
 from src.utils.metric import bbox_iou
-import pdb
 
 class Sampler():
     def __init__(self, nc, topk=13, alpha=1.0, beta=6.0, eps=1e-9):
@@ -11,7 +10,6 @@ class Sampler():
         self.beta = beta
         self.eps = eps
 
-    @stop_gradient
     def sampling(self, pred_scores, pred_bboxes, anc_points, gt_labels, gt_bboxes, mask_gt):
         gt_shape = tf.shape(gt_labels)
         b, max_det = gt_shape[0], gt_shape[1]
@@ -72,10 +70,10 @@ class Sampler():
         target_bboxes = tf.gather(gt_bboxes_flat, target_gt_indices_flat)
 
         target_labels_clamped = tf.maximum(target_labels, 0)
-        target_scores = tf.one_hot(target_labels_clamped, depth=self.nc, dtype=tf.int32)
+        target_scores = tf.one_hot(target_labels_clamped, depth=self.nc, dtype=tf.float32)
 
         fg_scores_mask = tf.tile(fg_mask[:, :, None], [1, 1, self.nc])
-        target_scores = tf.cast(tf.where(fg_scores_mask, target_scores, 0), tf.float32)
+        target_scores = tf.where(fg_scores_mask, target_scores, 0.0)
 
         return target_labels, target_bboxes, target_scores
 

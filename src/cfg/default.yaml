@@ -4,20 +4,40 @@ num_processes: 1
 
 model: yolo11n.yaml
 data: coco
-epochs: 2
+epochs: 600
 close_mosaic: 1
 workers: 8
-batch_size: &batch_size 4
+batch_size: &batch_size 32
 cache: &cache False # need least 100G memory
 prefetch_size: 8
 shuffle: True
 input_shape: &input_shape [640, 640, 3]
+conf_th: 0.25 # predict:0.25, validation: 0.001
+iou_th: 0.7
 constant: &constant 0 # (0-255) it can be list
 max_det: &max_det 300
+
+optimizer: 
+  name: SGD # SGD, Adam, AdamW, AdamW, Adamax, NAdam, RMSProp
+  beta: 0.9 # beta for SGD, Adam
+  weight_decay: 0.0005 # optimizer weight decay
+  warmup_beta: 0.8 # warmup initial beta for SGD
+
+scheduler:
+  name: linear
+  lri: 0.01 # initial lr
+  lrf: 0.01 # final lr (lri * lrf)
+  warmup_epochs: 3 # warmup epochs
+  warmup_bias_lr: 0.0 # warmup initial bias lr
 
 environment:
   cpus: all
   gpus: all
+
+loss:
+  box: 7.5
+  cls: 0.5
+  dfl: 1.5
 
 augmentation:
   mosaic: [*input_shape] # (input_shape)
@@ -25,14 +45,20 @@ augmentation:
   random_hsv: [0.15, 0.7, 0.4] # (+/- H, S, V)
   flip_ud: [0.0] # (prob)
   flip_lr: [0.5] # (prob)
+  
+# process:
+#   resize_padding: [*input_shape, *constant, True] # (input_shape, constant, center)
 
 process:
-  resize_padding: [*input_shape, *constant, True] # (input_shape, constant, center)
-  unsqueeze_coords: [True]
   filter: [0.02]
   segment_to_task: [*task]
 
 postprocess:
   batch: [*task, *max_det]
-  normalize: [True]
+  # normalize: [True] -> model로 이동하자 cpu보다 gpu가 빠름
+
+logs: 
+  train: [Epoch, GPU_Usage, Cls_Loss, Box_Loss, Dfl_Loss, Total_Loss, Lr]
+  val: [Images, Instances, Precision, Recall, mAP50, mAP50:95, Total_Loss]
+  eval: []
   

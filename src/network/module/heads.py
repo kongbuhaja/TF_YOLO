@@ -44,24 +44,23 @@ class DFL_Detect(Layer):
             pass
         
         for i in range(self.nl):
-            x[i] = tf.concat([self.cv2[i](x[i]), self.cv3[i](x[i])], -1)
-            # Reshape 필요 b, h, w, c -> b, h*w, c 원본 살펴보자
+            x[i] = tf.concat([self.cv2[i](x[i], training=training),
+                              self.cv3[i](x[i], training=training)], -1)
         
         if training:
             return x
         
-        return self.postprocess(x)
+        return self.postprocess(x), x
             
     def postprocess(self, x):
         shape = tf.shape(x[0])
         B, C = shape[0], shape[-1]
         
-        if self.anchors is None:
-            self.anchors, self.strides = make_anchors(x, self.stride)
+        anchors, strides = make_anchors(x, self.stride)
         
         x = tf.concat([tf.reshape(xi, [B, -1, C]) for xi in x], 1)
         box, cls = tf.split(x, [self.reg_max * 4, self.nc], -1)
-        dbox = self.decode_box(self.dfl(box), self.anchors[None]) * self.strides
+        dbox = self.decode_box(self.dfl(box), anchors[None]) * strides
         dcls = self.decode_cls(cls)
         return tf.concat([dbox, dcls], -1)
         
@@ -70,6 +69,20 @@ class DFL_Detect(Layer):
         
     def decode_cls(self, cls):
         return tf.sigmoid(cls)
+    
+    def initialize_bias(self):
+        box_bias = 1.0
+        cls_bias = -math.log((1 - 0.01) / 0.01)
+
+        for cv2, cv3 in zip(self.cv2.layers, self.cv3.layers):
+            box_conv = cv2.layers[-1].conv
+            if box_conv.bias is not None:
+                box_conv.bias.assign(tf.fill(box_conv.bias.shape, box_bias))
+
+            cls_conv = cv3.layers[-1].conv
+            if cls_conv.bias is not None:
+                # cls_bias = (5 / self.nc / (640 / stride) ** 2) -> need input_size -> X
+                cls_conv.bias.assign(tf.fill(cls_conv.bias.shape, cls_bias))
         
 class Detect(Layer):
     pass

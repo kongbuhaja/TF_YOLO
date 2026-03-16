@@ -44,7 +44,7 @@ class DFL(Layer):
         
         x = tf.reshape(x, [-1, 4, self.reg_max])
         x = tf.nn.softmax(x, axis=-1)
-        x = x @ self.project
+        x = tf.matmul(x, self.project)
         x = tf.reshape(x, [b, a, 4])
         return x
 
@@ -72,7 +72,7 @@ class Conv(Layer):
                            groups=g,
                            dilation_rate=d,
                            use_bias=False if bn else True,
-                           kernel_initializer = HeUniform)
+                           kernel_initializer = HeUniform())
         # regulaizer는 고민해보자
         self.bn = BatchNormalization() if bn else Identity()
         if act is True:
