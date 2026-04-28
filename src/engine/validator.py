@@ -11,10 +11,6 @@ class Validator(Handler):
         self.loss = DFLDetectionLoss(model, cfg.loss)
         self.iouv = np.linspace(0.5, 0.95, 10)
         self.metric = Metrics(len(self.dataset.classes))
-# logs: 
-#   train: [Epoch, GPU_Usage, Cls_Loss, Box_Loss, Dfl_Loss, Total_Loss, Lr]
-#   val: [Images, Instances, Precision, Recall, mAP50, mAP50:95, Total_Loss]
-#   eval: []
   
     def validate(self):
         def log_update():

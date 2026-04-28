@@ -56,9 +56,3 @@ process:
 postprocess:
   batch: [*task, *max_det]
   # normalize: [True] -> model로 이동하자 cpu보다 gpu가 빠름
-
-logs: 
-  train: [Epoch, GPU_Usage, Cls_Loss, Box_Loss, Dfl_Loss, Total_Loss, Lr]
-  val: [Images, Instances, Precision, Recall, mAP50, mAP50:95, Total_Loss]
-  eval: []
-  

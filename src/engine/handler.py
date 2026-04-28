@@ -10,7 +10,7 @@ class Handler():
         self.cfg = cfg
         self.dataset = dataset
         self.split = split
-        self.logger = Logger(getattr(self.cfg.logs, self.split))
+        self.logger = Logger(self.split)
         data = self.dataset.load(self.split, self.cfg.cache, self.cfg.workers)
     
         self.dataloader = Dataloader(cfg, data)

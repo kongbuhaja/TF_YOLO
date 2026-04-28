@@ -54,10 +54,9 @@ class Env():
         self.info["cpus"] = {
             "physical_cores": all_cpus,
             "active_cores_range": allowed_str,
-            "active_cores_count": allowed_count,
-            "usage": self._get_cpu_usage(interval=0.1),
-            "temperature": self._get_cpu_temperature()
+            "active_cores_count": allowed_count
         }
+        self._update_cpu_info()
 
     def gpu_set(self, gpus):
         pynvml.nvmlInit()
@@ -112,10 +111,10 @@ class Env():
                            "is_activate": is_activate,
                            "tf_name": tf_device_name,
                            "model_name": model_name,
-                           "used_mem_mb": current_mem,
-                           "total_mem_mb": total_mem,
+                           "used_mem": current_mem,
+                           "total_mem": total_mem,
                            "usage": usage,
-                           "temperature": temp}
+                           "temp": temp}
                 
             self.info["gpus"] = {"physical_count": len(physical_gpus),
                                  "logical_count": len(logical_gpus),
@@ -129,14 +128,31 @@ class Env():
         self._update_cpu_info()
         self._update_gpu_info()
 
-    def _get_cpu_temperature(self):
+    def _update_cpu_info(self):
+        self._update_cpu_usage()
+        self._update_cpu_temp()
+
+    def _update_cpu_usage(self, interval=None):
+        try:
+            per_core_usages = psutil.cpu_percent(interval=interval, percpu=True)
+            max_core_idx = len(per_core_usages) - 1
+            allowed_usages = [per_core_usages[i] for i in self.activate_cpus if i <= max_core_idx]
+
+            if allowed_usages:
+                self.info["cpus"]["usage"] = sum(allowed_usages)/len(allowed_usages)
+            else:
+                self.info["cpus"]["usage"] = 0.0
+        except Exception:
+            self.info["cpus"]["usage"] = 0.0
+
+    def _update_cpu_temp(self):
         if psutil is None:
             return "N/A (Install psutil)"
         
         try:
             temps = psutil.sensors_temperatures()
             if not temps:
-                return "N/A"
+                self.info["cpus"]["temp"] = "N/A"
             
             max_temp = 0.0
             found = False
@@ -146,18 +162,16 @@ class Env():
                         max_temp = max(max_temp, entry.current)
                         found = True
             
-            return f"{max_temp:.1f}" if found else "N/A"
+            self.info["cpus"]["temp"] = max_temp if found else "N/A"
         except Exception:
-            return "N/A"
-
-    def _update_cpu_info(self):
-        self.info["cpus"]["usage"] = self._get_cpu_usage()
-        self.info["cpus"]["temperature"] = self._get_cpu_temperature()
+            self.info["cpus"]["temp"] = "N/A"
 
     def _update_gpu_info(self):
         physical_gpus = tf.config.list_physical_devices('GPU')
 
         gpus_data = self._get_gpus_data()
+        used_mem = 0
+        temps = []
 
         for i, p_gpu in enumerate(physical_gpus):
             gpu_data = gpus_data.get(i, {})
@@ -167,10 +181,15 @@ class Env():
             temp = gpu_data.get("temp", 0)
             
             usage = (current_mem / total_mem * 100) if total_mem > 0 else 0.0
+            used_mem += current_mem
+            temps.append(temp)
             
             self.info["gpus"]["data"][i]["current_mem"] = current_mem
             self.info["gpus"]["data"][i]["usage"] = usage
             self.info["gpus"]["data"][i]["temp"] = temp
+        
+        self.info["gpus"]["used_mem"] = used_mem
+        self.info["gpus"]["temp"] = sum(temps)/len(temps)
 
     def _get_gpus_data(self):      
         data = {}
@@ -208,9 +227,10 @@ class Env():
         
         # [CPU Info]
         print("[CPUs Info]")
-        temp_str = f"{cpus_info['temperature']}°C" if cpus_info['temperature'] != "N/A" else "N/A"
+        cpus_usage = self._get_cpu_usage()
+        cpus_temp = self._get_cpu_temp()
         print(f"  - System Physical Cores : {cpus_info['physical_cores']}")
-        print(f"  - Activate Cores (Affinity) : {cpus_info['active_cores_range']} (Total: {cpus_info['active_cores_count']}) | Temp: {temp_str}")
+        print(f"  - Activate Cores (Affinity) : {cpus_info['active_cores_range']} (Usage: {cpus_usage}) | Temp: {cpus_temp}")
         
         # [GPU Info]
         print("\n[GPUs Info]")
@@ -223,12 +243,12 @@ class Env():
                 
                 if gpu_info['is_activate']:
                     status_icon = "✅"
-                    mem_str = f"{gpu_info['used_mem_mb']:.1f}MB / {gpu_info['total_mem_mb']:.1f}MB ({gpu_info['usage']:.1f}%)"
+                    gpu_usage = f"{gpu_info['used_mem']:.1f} / {gpu_info['total_mem']:.1f}MB (Usage: {gpu_info['usage']:.1f}%)"
                 else:
                     status_icon = "❌"
-                    mem_str = "Disabled (0.0MB Used)"
-                
-                print(f"      - {status_icon} Mem Usage: {mem_str} | Temp: {gpu_info['temperature']}°C")
+                    gpu_usage = "Disabled (0.0MB Used)"
+                gpu_temp = gpu_info["temp"]
+                print(f"      - {status_icon} GPU Memory: {gpu_usage} | Temp: {gpu_temp}°C")
         else:
             print("    (Running on CPU Mode)")
             
@@ -257,28 +277,35 @@ class Env():
             
         return ", ".join(ranges)
     
-    def _get_cpu_usage(self, interval=None):
-        try:
-            per_core_usages = psutil.cpu_percent(interval=interval, percpu=True)
-            max_core_idx = len(per_core_usages) - 1
-            allowed_usages = [per_core_usages[i] for i in self.activate_cpus if i <= max_core_idx]
-
-            if allowed_usages:
-                return sum(allowed_usages) / len(allowed_usages)
-            return 0.0
-        except Exception:
-            return 0.0
+    def get_info_log(self):
+        return {"CPU": f"{self._get_cpu_usage(p=0)}/{self._get_cpu_temp(p=0)}",
+                "GPU": f"{self._get_gpu_mem(gb=True, p=0)}/{self._get_gpu_temp(p=0)}"}
     
-    def _get_gpu_usage(self, is_percent=False):
-        total_used_MB = 0
-        
-        for data in self.info["gpus"]["data"].values():
-            total_used_MB += data["current_mem"]
-        
+    def _get_cpu_usage(self, p=1):
+        return f"{self.info['cpus']['usage']:.{p}f}%"
+
+    def _get_cpu_temp(self, p=1):
+        if self.info['cpus']['temp'] == "N/A":
+            return "N/A"
+        return f"{self.info['cpus']['temp']:.{p}f}°C"
+    
+    def _get_gpu_usage(self, is_percent=False, gb=True, p=1):
+        div = 1024 if gb else 1
+        byte = "G" if gb else "M"
+
         if is_percent:
-            return f"{total_used_MB / self.info['gpus']['capacity'] / 1024:.1f}%"
+            return f"{self.info['gpus']['used_mem']/self.info['gpus']['capacity']:.{p}f}%"
         else:
-            return f"{total_used_MB/1024:.1f}/{self.info['gpus']['capacity']/1024:.1f}G"
+            return f"{self.info['gpus']['used_mem']/div:.{p}f}/{self.info['gpus']['capacity']/div:.{p}f}{byte}"
         
+    def _get_gpu_mem(self, gb=True, p=1):
+        div = 1024 if gb else 1
+        byte = "G" if gb else "M"
+
+        return f"{self.info['gpus']['used_mem']/div:.{p}f}{byte}"
+    
+    def _get_gpu_temp(self, p=1):
+        return f"{self.info['gpus']['temp']:.{p}f}°C"
+    
     def __del__(self):
         pynvml.nvmlShutdown()

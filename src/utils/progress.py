@@ -1,10 +1,11 @@
 import time, sys
 
 class ProgressBar:
-    def __init__(self, iterable, task="", headers=None, total=None, ncols=12, min_interval=0.5):
+    def __init__(self, iterable, task="", split="", headers=None, total=None, ncols=12, min_interval=0.5):
         self.iterable = iterable
         self.headers = headers if headers else ["Epoch", "GPU_Mem", "Cls_Loss", "Box_Loss", "Dfl_Loss"]
-        self.task = task
+        self.task = task.upper()
+        self.split = split.upper()
         self.ncols = ncols
         self.min_interval = min_interval
         self.is_ipython = False
@@ -107,7 +108,7 @@ class ProgressBar:
         for h in self.headers:
             line1 += f"{h:<{self.ncols}}"
             
-        line2 = f"{'':>{self.ncols-3}} | "
+        line2 = f"{self.split:>{self.ncols-3}} | "
         for h in self.headers:
             val = self.values.get(h, "")
             line2 += f"{val:<{self.ncols}}"

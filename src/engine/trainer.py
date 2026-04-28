@@ -17,15 +17,17 @@ class Trainer(Handler):
         
     def train(self):
         def log_update():
+            self.env.update_info()
             self.logger.update(Epoch=f"{epoch+1}/{self.epochs}")
             self.logger.update(**loss_items)
             self.logger.update(Lr=self.optimizer.lr)
-            self.logger.update(GPU_Usage=self.env.get_usage())
+            self.logger.update(**self.env.get_info_log())
 
         try:            
             for epoch in range(self.epochs):
                 pbar = ProgressBar(self.dataloader,
-                                   task=self.task.upper(),
+                                   task=self.cfg.task,
+                                   split=self.split,
                                    headers=self.logger.keys)
                 for data in pbar:
                     batch_image, batch_labels = data["image"], data["labels"]
