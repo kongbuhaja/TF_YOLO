@@ -107,12 +107,8 @@ class Sampler():
             topk_mask = tf.cast(topk_values > self.eps, tf.float32)
         else:
             topk_mask = tf.cast(topk_mask, tf.float32)
-            
-            if tf.shape(topk_mask)[-1] == self.topk:
-                topk_mask = tf.cast(topk_mask, tf.float32)
-            else:
-                topk_mask = tf.cast(tf.reshape(topk_mask, [-1, 1]), tf.float32)
-                topk_mask = tf.tile(topk_mask, [1, self.topk])
+            topk_mask = tf.reshape(topk_mask, [-1, 1])
+            topk_mask = tf.broadcast_to(topk_mask, [b * max_det, self.topk])
 
         row_indices = tf.tile(tf.range(b * max_det, dtype=topk_indices.dtype)[..., None], [1, self.topk])
         scatter_indices = tf.stack([row_indices, topk_indices], -1)

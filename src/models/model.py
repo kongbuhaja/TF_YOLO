@@ -13,6 +13,8 @@ class Model(tf.keras.Model):
         # self._input_shape = np.array(cfg.input_shape)
         self.modules, self.info = parse_model(cfg)
         self.build([1, *cfg.input_shape])
+        self.e2e = getattr(self.modules[-1], "e2e", False)
+        self.nc = getattr(self.modules[-1], "nc")
         self.initialize_bias()
 
     def call(self, x, normalize=True, training=False):
@@ -135,8 +137,18 @@ def parse_model(cfg):
             assert hasattr(cfg, "nc"), "Please set nc in your model.yaml."
             if module == "detect": # 버전별로 detect면 원래의 detect로 하고 dfl_detect면 dfl_detect로
                 module = "dfl_detect"
-            arg = [in_ch, getattr(cfg, "nc"), stride]
+                e2e = getattr(cfg, "e2e", False)
+            elif module == "v10detect":
+                module = "dfl_detect"
+                e2e = getattr(cfg, "e2e", True)
+            light = True
             out_ch = cfg.nc
+
+            arg = [in_ch, 
+                   out_ch, 
+                   stride,
+                   light,
+                   e2e]
 
         module = all_modules[module](*arg)
         module.idx, module.f, module.r = idx, f, r

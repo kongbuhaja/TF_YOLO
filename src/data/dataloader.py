@@ -106,7 +106,7 @@ class Dataloader():
                 batch_data = [[self.data[idx].copy() for idx in indices] for indices in sample_indices]
             else:
                 batch_data = [self.data[idx].copy() for idx in batch_indices]
-            
+
             if self.workers > 1 and len(batch_data) > 1:
                 futures = [self._executor.submit(self.process_pipeline, data) for data in batch_data]
                 processed_data = [future.result() for future in futures]

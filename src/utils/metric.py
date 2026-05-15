@@ -64,7 +64,10 @@ def compute_ap(recall, precision, method="interp"):
     return ap, mpre, mrec
 
 def ap_per_class(samples=1000, eps=1e-7, **stat):
-    tp, conf, p_cls, t_cls = stat["tp"], stat["conf"], stat["p_cls"], stat["t_cls"]
+    tp = np.array(stat["tp"])
+    conf = np.array(stat["conf"])
+    p_cls = np.array(stat["p_cls"])
+    t_cls = np.array(stat["t_cls"])
     
     i = np.argsort(-conf)
     tp, conf, p_cls = tp[i], conf[i], p_cls[i]

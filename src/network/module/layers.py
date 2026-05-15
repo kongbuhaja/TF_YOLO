@@ -56,10 +56,28 @@ class Concat(Layer):
     def call(self, x, training=False):
         return self.concat(x)
 
+# class UpSample(Layer):
+#     def __init__(self, size, interpolation="nearest"):
+#         super().__init__()
+#         self.upsample = UpSampling2D(size, interpolation=interpolation)
+    
+#     def call(self, x, training=False):
+#         return self.upsample(x)
+    
 class UpSample(Layer):
     def __init__(self, size, interpolation="nearest"):
         super().__init__()
-        self.upsample = UpSampling2D(size, interpolation=interpolation)
+        if interpolation == "nearest":
+            self.size = size
+            self.upsample = self.XLAUpsample2D
+        else:
+            self.upsample = UpSampling2D(size, interpolation=interpolation)
+
+    def XLAUpsample2D(self, x):
+        x = tf.repeat(x, repeats=self.size, axis=1)
+        x = tf.repeat(x, repeats=self.size, axis=2)
+        
+        return x
     
     def call(self, x, training=False):
         return self.upsample(x)

@@ -33,24 +33,27 @@ class ProgressBar:
         else:
             self.total = total
             
-        self.current = 0
-        self.start_time = time.time()
         self.values = {header: "" for header in self.headers}
-        self.first_print = True
 
-        self.start_time = 0
-        self.last_print_time = 0
         self.avg_rate = 0.0
         self.smoothing = 0.3
 
-    def __iter__(self):
+    def _initiate(self):
         self.start_time = time.time()
         self.current = 0
+        self.last_print_time = 0
+        self.avg_rate = 0.0
+        self.first_print = True
+
+    def __iter__(self):
+        self._initiate()
                 
         for item in self.iterable:
             yield item
             self.current += 1
             self._print_lines()
+
+        self.print([""])
 
     def set_status(self, **kwargs):
         for key, value in kwargs.items():

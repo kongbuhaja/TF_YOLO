@@ -80,7 +80,7 @@ class Read_image(Transform):
             for i in range(len(data)):
                 data[i]["image"] = self.read(data[i]["image"])
         elif isinstance(data, dict):
-            if isinstance(data[0]["image"], np.ndarray):
+            if isinstance(data["image"], np.ndarray):
                 return data
             data["image"] = cv2.imread(data["image"])
         return data
@@ -643,8 +643,9 @@ class Batch(Transform):
         """
         B = len(serialized_bboxes)
         lengths = [bboxes.shape[0] for bboxes in serialized_bboxes]
-        max_det = max(lengths) if self.max_det is None else self.max_det
+        max_det = self.max_det if self.max_det else max(lengths) 
         result = np.zeros([B, max_det, 5], dtype=np.float32)
+        result[:][0] = -1
         
         for b, (bboxes, length) in enumerate(zip(serialized_bboxes, lengths)):
             result[b][:length] = bboxes

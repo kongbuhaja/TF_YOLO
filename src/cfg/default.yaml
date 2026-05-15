@@ -16,6 +16,7 @@ conf_th: 0.25 # predict:0.25, validation: 0.001
 iou_th: 0.7
 constant: &constant 0 # (0-255) it can be list
 max_det: &max_det 300
+period: 1 # save, valid model period
 
 optimizer: 
   name: SGD # SGD, Adam, AdamW, AdamW, Adamax, NAdam, RMSProp

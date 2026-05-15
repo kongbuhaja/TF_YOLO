@@ -277,7 +277,7 @@ class Env():
             
         return ", ".join(ranges)
     
-    def get_info_log(self):
+    def get_info(self):
         return {"CPU": f"{self._get_cpu_usage(p=0)}/{self._get_cpu_temp(p=0)}",
                 "GPU": f"{self._get_gpu_mem(gb=True, p=0)}/{self._get_gpu_temp(p=0)}"}
     
