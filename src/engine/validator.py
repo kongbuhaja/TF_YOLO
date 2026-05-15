@@ -13,20 +13,17 @@ class Validator(Handler):
         self.metric = Metrics(len(self.dataset.classes))
   
     def validate(self):
-        def log_update():
-            self.logger
         try:
             self.on_epoch_start()
 
-            for data in ProgressBar(self.dataloader,
-                                    task=self.task.upper(),
-                                    headers=self.logger.keys):
+            for data in self.pbar:
                 batch_image, batch_labels = data["image"], data["labels"]
 
-                self.validate_step(batch_image, batch_labels)
+                total_loss, loss_items = self.validate_step(batch_image, batch_labels)
 
-            result = ap_per_class(**self.stats)
-            self.metric.update(result)
+                self.on_iteration_end(loss_items)
+        
+            self.on_epoch_end()
         except Exception as e:
             print(f"Training loop iterrupted: {e}")
             raise e
@@ -51,7 +48,7 @@ class Validator(Handler):
 
         total_loss, loss_items = self.loss(raw_preds, batch_labels)
 
-        if self.model.end2end:
+        if self.model.e2e:
             nms_preds = preds
         else:
             nms_preds = NMS(preds,
@@ -61,10 +58,12 @@ class Validator(Handler):
                             nc=self.model.nc)
 
         for b, pred in enumerate(nms_preds):
-            labels, pred = batch_labels[b].numpy(), pred.numpy()
-            t_cls, t_boxes = labels[:, 1], labels[:, 2:]
+            labels, pred = batch_labels[b], pred.numpy()
+            labels = labels[labels[..., -1] == -1]
+            
+            t_cls, t_boxes = labels[:, 1], labels[:, 1:]
             p_boxes, conf, p_cls = pred[:, :4], pred[:, 4], pred[:, 5]
-
+            # print(t_boxes.shape, p_boxes.shape)
             iou = box_iou(t_boxes, p_boxes)
             tp = match(iou, t_cls, p_cls)
 
@@ -72,13 +71,32 @@ class Validator(Handler):
             self.stats["conf"].extend(conf)
             self.stats["p_cls"].extend(p_cls)
             self.stats["t_cls"].extend(t_cls)
+
+        return total_loss, loss_items
             
     def on_epoch_start(self):
+        super().on_epoch_start()
+
         self.stats = {"tp": [],
                       "conf": [],
                       "p_cls": [],
                       "t_cls": []}
         
     def on_epoch_end(self):
-        pass
+        super().on_epoch_end()
 
+    def on_iteration_end(self, loss_items):
+        def log_update():
+            log = {"Ins/Img": f"",
+                   "mAP50": self.metric.map50,
+                   "mAP50:95": self.metric.map,
+                   **loss_items,
+                   **self.env.get_info()}
+            
+            self.logger.update(**log)
+            
+        self.env.update_info()
+        result = ap_per_class(**self.stats)
+        self.metric.update(result)
+        log_update()
+        self.pbar.set_status(**self.logger.data)
