@@ -47,7 +47,10 @@ class Dataloader():
         self.postprocess_pipeline = Process(cfg.postprocess)
 
     def __len__(self):
-        return int(np.ceil(len(self.indices) / self.batch_size))
+        if self.split == "train":
+            return len(self.indices) // self.batch_size
+        else:
+            return int(np.ceil(len(self.indices) / self.batch_size))
     
     def __iter__(self):
         self.on_epoch_start()

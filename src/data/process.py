@@ -645,10 +645,11 @@ class Batch(Transform):
         lengths = [bboxes.shape[0] for bboxes in serialized_bboxes]
         max_det = self.max_det if self.max_det else max(lengths) 
         result = np.zeros([B, max_det, 5], dtype=np.float32)
-        result[:][0] = -1
+        result[..., 0] = -1
         
         for b, (bboxes, length) in enumerate(zip(serialized_bboxes, lengths)):
-            result[b][:length] = bboxes
+            valid_len = min(max_det, length)
+            result[b][:valid_len] = bboxes[:valid_len]
         return result
     
     def batch_mask(self, serialized_mask):
