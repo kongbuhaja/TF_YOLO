@@ -12,30 +12,32 @@ class Metrics():
 
     @property
     def ap50(self):
-        return self.aps[:, 0] if self.aps is not None else 0.0
+        return self.aps[:, 0] if self.aps is not None and len(self.aps) > 0 else 0.0
     
     @property
     def ap(self):
-        return self.aps.mean(1) if self.aps is not None else 0.0
+        return self.aps.mean(1) if self.aps is not None and len(self.aps) > 0 else 0.0
     
     @property
     def map50(self):
-        return self.aps[:, 0].mean() if self.aps is not None else 0.0
+        return self.aps[:, 0].mean() if self.aps is not None and len(self.aps) > 0 else 0.0
     
     @property
     def map75(self):
-        return self.aps[:, 5].mean() if self.aps is not None else 0.0
+        return self.aps[:, 5].mean() if self.aps is not None and len(self.aps) > 0 else 0.0
     
     @property
     def map(self):
-        return self.aps.mean() if self.aps is not None else 0.0
+        return self.aps.mean() if self.aps is not None and len(self.aps) > 0 else 0.0
     
     @property
     def maps(self):
         maps = np.zeros(self.nc) + self.map # to match mean of maps and self.map
-        for i, c in self.cls:
-            maps[c] = self.aps[i].mean()
-        return maps
+
+        if self.aps is not None and len(self.aps) > 0:
+            for i, c in self.cls:
+                maps[c] = self.aps[i].mean()
+            return maps
     
     def update(self, result):
         (self.p, self.r, self.f1,
@@ -77,34 +79,46 @@ def ap_per_class(samples=1000, eps=1e-7, **stat):
 
     x, prec_values = np.linspace(0, 1, samples), []
 
-    ap, p_curve, r_curve = np.zeros((nc, tp.shape[1])), np.zeros((nc, samples)), np.zeros((nc, samples))
-    for ci, c in enumerate(unique_cls):
-        i = p_cls == c
-        n_l = nt[ci]
-        n_p = i.sum()
-        if n_p == 0 or n_l == 0:
-            continue
+    if len(tp):
+        ap, p_curve, r_curve = np.zeros((nc, tp.shape[1])), np.zeros((nc, samples)), np.zeros((nc, samples))
+        for ci, c in enumerate(unique_cls):
+            i = p_cls == c
+            n_l = nt[ci]
+            n_p = i.sum()
+            if n_p == 0 or n_l == 0:
+                continue
 
-        fpc = (1 - tp[i]).cumsum(0)
-        tpc = tp[i].cumsum(0)
+            fpc = (1 - tp[i]).cumsum(0)
+            tpc = tp[i].cumsum(0)
 
-        recall = tpc / (n_l + eps)
-        r_curve[ci] = np.interp(-x, -conf[i], recall[:, 0], left=0)
+            recall = tpc / (n_l + eps)
+            r_curve[ci] = np.interp(-x, -conf[i], recall[:, 0], left=0)
 
-        precision = tpc / (tpc + fpc)
-        p_curve[ci] = np.interp(-x, -conf[i], precision[:, 0], left=1)
+            precision = tpc / (tpc + fpc)
+            p_curve[ci] = np.interp(-x, -conf[i], precision[:, 0], left=1)
 
-        for j in range(tp.shape[1]):
-            ap[ci, j], mpre, mrec = compute_ap(recall[:, j], precision[:, j])
-            if j == 0:
-                prec_values.append(np.interp(x, mrec, mpre))
+            for j in range(tp.shape[1]):
+                ap[ci, j], mpre, mrec = compute_ap(recall[:, j], precision[:, j])
+                if j == 0:
+                    prec_values.append(np.interp(x, mrec, mpre))
+        
+        prec_values = np.array(prec_values) if prec_values else np.zeros((1, 1000))
+
+        f1_curve = 2 * p_curve * r_curve / (p_curve + r_curve + eps)
+
+        if f1_curve.shape[0] > 0:
+            i = smooth(f1_curve.mean(0), 0.1).argmax()
+        else:
+            i = 0
+        p, r, f1 = p_curve[:, i], r_curve[:, i], f1_curve[:, i]
+        return p, r, f1, ap, unique_cls.astype(int), p_curve, r_curve, f1_curve, x, prec_values
     
-    prec_values = np.array(prec_values) if prec_values else np.zeros((1, 1000))
+    else:
+        p, r, f1 = np.zeros(nc), np.zeros(nc), np.zeros(nc)
+        ap = np.zeros((nc, 10))
+        p_curve, r_curve, f1_curve = np.zeros((nc, samples)), np.zeros((nc, samples)), np.zeros((nc, samples))
+        prec_values = np.zeros((1, samples))
 
-    f1_curve = 2 * p_curve * r_curve / (p_curve + r_curve + eps)
-
-    i = smooth(f1_curve.mean(0), 0.1).argmax()
-    p, r, f1 = p_curve[:, i], r_curve[:, i], f1_curve[:, i]
     return p, r, f1, ap, unique_cls.astype(int), p_curve, r_curve, f1_curve, x, prec_values
 
 def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
