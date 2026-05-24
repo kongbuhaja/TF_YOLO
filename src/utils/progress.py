@@ -51,7 +51,7 @@ class ProgressBar:
         for item in self.iterable:
             yield item
             self.current += 1
-            # self._print_lines()
+            self._print_lines()
 
         self.print([""])
 
