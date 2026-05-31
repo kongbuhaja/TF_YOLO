@@ -68,7 +68,7 @@ class DFLDetectionLoss():
         total_loss = tf.reduce_sum([cls_loss, box_loss, dfl_loss])
 
         b = tf.cast(b, tf.float32)
-        loss_items = {"Total_Loss": total_loss * b,
+        loss_items = {"Total_Loss": total_loss,
                       "Cls_Loss":cls_loss, 
                       "Box_Loss":box_loss, 
                       "Dfl_Loss":dfl_loss}
