@@ -4,7 +4,7 @@ import numpy as np
 class Logger:
     def __init__(self, split=None, keys=None):
         if split == "train":
-            keys = ["Epoch", "GPU", "CPU", "Ins/Img", "Cls_Loss", "Box_Loss", "Dfl_Loss", "Lr"]
+            keys = ["Epoch", "GPU", "CPU", "Ins/Img", "Cls_Loss", "Box_Loss", "Dfl_Loss", "LR"]
         elif split == "val":
             keys = ["Ins/Img", "GPU", "CPU", "mAP50", "mAP50:95", "Cls_Loss", "Box_Loss", "Dfl_Loss"]
         self.keys = keys
@@ -17,7 +17,7 @@ class Logger:
     def _to_scalar(self, value):
         if tf.is_tensor(value):
             value = value.numpy()
-
+        
         if isinstance(value, (np.ndarray, np.generic)):
             value = value.item()
     
