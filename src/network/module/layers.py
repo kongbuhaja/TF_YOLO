@@ -92,7 +92,7 @@ class Conv(Layer):
                            use_bias=False if bn else True,
                            kernel_initializer = HeUniform())
         # regulaizer는 고민해보자
-        self.bn = BatchNormalization() if bn else Identity()
+        self.bn = BatchNormalization(momentum=0.95) if bn else Identity()
         if act is True:
             self.act = self.default_act
         elif isinstance(act, str):
