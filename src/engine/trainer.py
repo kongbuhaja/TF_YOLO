@@ -2,8 +2,8 @@ from src.engine.handler import Handler
 from src.engine.validator import Validator
 from src.utils.loss import DFLDetectionLoss
 from src.utils.optimizer import Optimizer
-from src.utils.progress import ProgressBar
 import tensorflow as tf
+import numpy as np
 
 class Trainer(Handler):
     def __init__(self, env, model, cfg, dataset):
@@ -15,6 +15,11 @@ class Trainer(Handler):
         self.optimizer = Optimizer(cfg, self.total_steps, self.steps_per_epoch)
 
         self.make_dir(self.model.model_name)
+
+        if self.cfg.period > 0 :
+            self.validator = Validator(self.env, self.model, self.cfg, self.dataset)
+        else:
+            self.validator = None
         
     def train(self):
         try:            
@@ -26,7 +31,7 @@ class Trainer(Handler):
                     
                     total_loss, loss_items = self.train_step(batch_image, batch_labels)
 
-                    self.on_iteration_end(epoch, loss_items)
+                    self.on_iteration_end(epoch, loss_items, batch_labels)
                 
                 self.on_epoch_end(epoch)
 
@@ -53,14 +58,16 @@ class Trainer(Handler):
 
     def on_epoch_end(self, epoch):
         super().on_epoch_end()
-        if epoch % self.cfg.period == 0:
-            if not hasattr(self, "validator"):
-                self.validator = Validator(self.env, self.model, self.cfg, self.dataset)
+        if self.validator and epoch % self.cfg.period == 0:
             self.validator.validate()
 
-    def on_iteration_end(self, epoch, loss_items):
+    def on_iteration_end(self, epoch, loss_items, batch_labels):
         def log_update():
+            self.images += len(batch_labels)
+            self.instances += np.sum(batch_labels[..., 0] != -1)
+
             log = {"Epoch": f"{epoch+1}/{self.cfg.epochs}",
+                   "Ins/Img": f"{self.instances}/{self.images}",
                    "LR": self.optimizer.lr,
                    **loss_items,
                    **self.env.get_info()}

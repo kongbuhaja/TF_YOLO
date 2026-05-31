@@ -34,7 +34,8 @@ class Handler():
         #                         task=self.cfg.task.upper(),
         #                         split=self.split,
         #                         headers=self.logger.keys)
-        pass
+        self.images = 0
+        self.instances = 0
 
     def on_epoch_end(self):
         pass

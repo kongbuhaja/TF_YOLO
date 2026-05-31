@@ -2,7 +2,6 @@ from src.engine.handler import Handler
 from src.utils.metric import ap_per_class, box_iou, Metrics
 from src.utils.util import NMS
 import numpy as np
-from src.utils.progress import ProgressBar
 from src.utils.loss import DFLDetectionLoss
 
 class Validator(Handler):
@@ -21,7 +20,7 @@ class Validator(Handler):
 
                 total_loss, loss_items = self.validate_step(batch_image, batch_labels)
 
-                self.on_iteration_end(loss_items)
+                self.on_iteration_end(loss_items, batch_labels)
         
             self.on_epoch_end()
         except Exception as e:
@@ -56,14 +55,13 @@ class Validator(Handler):
                             iou_th=self.cfg.iou_th,
                             max_det=self.cfg.max_det,
                             nc=self.model.nc)
-
+        
         for b, pred in enumerate(nms_preds):
             labels, pred = batch_labels[b], pred.numpy()
             labels = labels[labels[..., -1] == -1]
             
             t_cls, t_boxes = labels[:, 1], labels[:, 1:]
             p_boxes, conf, p_cls = pred[:, :4], pred[:, 4], pred[:, 5]
-            # print(t_boxes.shape, p_boxes.shape)
             iou = box_iou(t_boxes, p_boxes)
             tp = match(iou, t_cls, p_cls)
 
@@ -85,9 +83,12 @@ class Validator(Handler):
     def on_epoch_end(self):
         super().on_epoch_end()
 
-    def on_iteration_end(self, loss_items):
+    def on_iteration_end(self, loss_items, batch_labels):
         def log_update():
-            log = {"Ins/Img": f"",
+            self.images += len(batch_labels)
+            self.instances += np.sum(batch_labels[..., 0] != -1)
+
+            log = {"Ins/Img": f"{self.instances}/{self.images}",
                    "mAP50": self.metric.map50,
                    "mAP50:95": self.metric.map,
                    **loss_items,
