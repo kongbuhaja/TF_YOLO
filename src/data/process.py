@@ -82,7 +82,7 @@ class Read_image(Transform):
         elif isinstance(data, dict):
             if isinstance(data["image"], np.ndarray):
                 return data
-            data["image"] = cv2.imread(data["image"])
+            data["image"] = cv2.imread(data["image"])[..., ::-1]
         return data
     
     def read(self, path):
@@ -328,11 +328,11 @@ class Random_HSV(Random_transform):
         lut_v = np.clip(x * (rv + 1), 0, 255).astype(np.uint8)
         lut_s[0] = 0
 
-        h, s, v = np.split(cv2.cvtColor(data["image"][..., ::-1], cv2.COLOR_BGR2HSV), 3, -1)
+        h, s, v = np.split(cv2.cvtColor(data["image"], cv2.COLOR_RGB2HSV), 3, -1)
         hsv = cv2.merge((cv2.LUT(h, lut_h),
                          cv2.LUT(s, lut_s),
                          cv2.LUT(v, lut_v)))
-        data["image"] = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)[..., ::-1]
+        data["image"] = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB)
         return data
     
 # probability based augmentation
@@ -617,7 +617,7 @@ class Batch(Transform):
         serialized_image = [data["image"] for data in serialized_data]
 
         batch_image_id = [data['image_id'] for data in serialized_data]
-        batch_image = np.stack(serialized_image, 0, dtype=np.float32)
+        batch_image = np.stack(serialized_image, 0, dtype=np.uint8)
         batch_data = {"image_id": batch_image_id,
                       "image": batch_image}
         if self.task in ["bbox", "segment"]:
