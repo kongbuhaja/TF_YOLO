@@ -25,18 +25,16 @@ class ProgressBar:
             self.print = self.terminal_print
             self.clear = self.terminal_clear
         
-        if total is None:
-            try:
-                self.total = len(iterable)
-            except:
-                self.total = 0
-        else:
-            self.total = total
+        self.total = len(iterable)
+        self._initiate()
             
         self.values = {header: "" for header in self.headers}
 
         self.avg_rate = 0.0
         self.smoothing = 0.3
+
+    def __len__(self):
+        return self.total
 
     def _initiate(self):
         self.start_time = time.time()
@@ -52,6 +50,9 @@ class ProgressBar:
             yield item
             self.current += 1
             self._print_lines()
+
+        if self.current == self.total:
+            self._print_lines(force=True)
 
         self.print([""])
 
