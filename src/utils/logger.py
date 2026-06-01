@@ -4,7 +4,7 @@ import numpy as np
 class Logger:
     def __init__(self, split=None, keys=None):
         if split == "train":
-            keys = ["Epoch", "GPU", "CPU", "Ins/Img", "Cls_Loss", "Box_Loss", "Dfl_Loss", "LR"]
+            keys = ["Epoch", "Ins/Img", "GPU", "CPU", "Cls_Loss", "Box_Loss", "Dfl_Loss", "LR"]
         elif split == "val":
             keys = ["Ins/Img", "GPU", "CPU", "mAP50", "mAP50:95", "Cls_Loss", "Box_Loss", "Dfl_Loss"]
         self.keys = keys
