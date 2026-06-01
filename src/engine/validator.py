@@ -109,7 +109,7 @@ class Validator(Handler):
                **self.avg_loss_items,
                **self.env.get_info()}
         
-        if self.pbar.current == self.pbar.total:
+        if self.pbar.current == self.pbar.total - 1:
             result = ap_per_class(**self.stats)
             self.metric.update(result)
             
