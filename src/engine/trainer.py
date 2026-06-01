@@ -45,8 +45,8 @@ class Trainer(Handler):
     @tf.function
     def train_step(self, batch_image, batch_labels):
         with tf.GradientTape() as tape:
-            preds = self.model(batch_image, training=True)
-            total_loss, loss_items = self.loss(preds, batch_labels)
+            raw_preds = self.model(batch_image, training=True)
+            total_loss, loss_items = self.loss(raw_preds, batch_labels)
             
         gradients = tape.gradient(total_loss, self.model.trainable_variables)
         self.optimizer.model.apply_gradients(zip(gradients, self.model.trainable_variables))
