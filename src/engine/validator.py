@@ -1,6 +1,6 @@
 from src.engine.handler import Handler
 from src.utils.metric import ap_per_class, box_iou, Metrics
-from src.utils.util import NMS
+from src.utils.util import NMS, xywh2xyxy
 import numpy as np
 from src.utils.loss import DFLDetectionLoss
 
@@ -15,14 +15,15 @@ class Validator(Handler):
         try:
             self.on_epoch_start()
 
-            for data in self.pbar:
+            for i, data in enumerate(self.pbar):
                 batch_image, batch_labels = data["image"], data["labels"]
 
                 total_loss, loss_items = self.validate_step(batch_image, batch_labels)
 
-                self.on_iteration_end(loss_items, batch_labels)
+                self.on_iteration_end(i, loss_items, batch_labels)
         
             self.on_epoch_end()
+
         except Exception as e:
             print(f"Training loop iterrupted: {e}")
             raise e
@@ -43,7 +44,7 @@ class Validator(Handler):
                     correct[matches[:, 1], i] = True
             return correct
         
-        preds, raw_preds = self.model(batch_image)
+        preds, raw_preds = self.model(batch_image, training=False)
 
         total_loss, loss_items = self.loss(raw_preds, batch_labels)
 
@@ -56,13 +57,15 @@ class Validator(Handler):
                             max_det=self.cfg.max_det,
                             nc=self.model.nc)
         
+        whwh = np.tile(self.cfg.input_shape[:2], 2)
+        
         for b, pred in enumerate(nms_preds):
             labels, pred = batch_labels[b], pred.numpy()
-            labels = labels[labels[..., -1] == -1]
+            labels = labels[labels[..., 0] != -1]
             
-            t_cls, t_boxes = labels[:, 1], labels[:, 1:]
-            p_boxes, conf, p_cls = pred[:, :4], pred[:, 4], pred[:, 5]
-            iou = box_iou(t_boxes, p_boxes)
+            t_cls, t_boxes = labels[:, 0].astype(int), xywh2xyxy(labels[:, 1:]) * whwh
+            p_boxes, conf, p_cls = pred[:, :4], pred[:, 4], pred[:, 5].astype(int)
+            iou = box_iou(t_boxes, p_boxes, xywh=False)
             tp = match(iou, t_cls, p_cls)
 
             self.stats["tp"].extend(tp)
@@ -80,24 +83,41 @@ class Validator(Handler):
                       "p_cls": [],
                       "t_cls": []}
         
+        self.avg_loss_items = {}
+                
+        log = {"mAP50": "",
+               "mAP50:95": "",}
+        
+        self.logger.update(**log)
+        
     def on_epoch_end(self):
         super().on_epoch_end()
 
-    def on_iteration_end(self, loss_items, batch_labels):
-        def log_update():
-            self.images += len(batch_labels)
-            self.instances += np.sum(batch_labels[..., 0] != -1)
+    def on_iteration_end(self, i, loss_items, batch_labels):
+        for k, v in loss_items.items():
+            if k in self.avg_loss_items:
+                self.avg_loss_items[k] = (self.avg_loss_items[k] * i + v) / (i+1) 
+            else:
+                self.avg_loss_items[k] = v
 
-            log = {"Ins/Img": f"{self.instances}/{self.images}",
-                   "mAP50": self.metric.map50,
-                   "mAP50:95": self.metric.map,
-                   **loss_items,
-                   **self.env.get_info()}
-            
-            self.logger.update(**log)
-            
         self.env.update_info()
-        result = ap_per_class(**self.stats)
-        self.metric.update(result)
-        log_update()
+
+        self.images += len(batch_labels)
+        self.instances += np.sum(batch_labels[..., 0] != -1)
+
+        log = {"Ins/Img": f"{self.instances}/{self.images}",
+               **self.avg_loss_items,
+               **self.env.get_info()}
+        
+        if self.pbar.current == self.pbar.total:
+            result = ap_per_class(**self.stats)
+            self.metric.update(result)
+            
+            log["mAP50"] = self.metric.map50
+            log["mAP50:95"] = self.metric.map
+        else:
+            log["mAP50"] = self.pbar.current
+            log["mAP50:95"] = self.pbar.total
+            
+        self.logger.update(**log)
         self.pbar.set_status(**self.logger.data)
