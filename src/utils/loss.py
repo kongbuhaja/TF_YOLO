@@ -106,7 +106,7 @@ class DFLDetectionLoss():
             pred_dist = tf.nn.softmax(pred_dist, -1)
             pred_dist = tf.matmul(pred_dist, self.project)
             pred_dist = tf.reshape(pred_dist, [b, anc_n, 4])
-        return dist2bbox(pred_dist, anchors)
+        return dist2bbox(pred_dist, anchors, xywh=False)
 
 class BCELoss():
     def __init__(self, x_logit=True, y_logit=False, eps=1e-7):

@@ -121,42 +121,6 @@ def ap_per_class(samples=1000, eps=1e-7, **stat):
 
     return p, r, f1, ap, unique_cls.astype(int), p_curve, r_curve, f1_curve, x, prec_values
 
-def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7):
-    """
-    for loss
-    box1, box2 = (..., M, 4)
-    """
-    if xywh:
-        x1, y1, w1, h1 = np.split(box1, 4, axis=-1)
-        x2, y2, w2, h2 = np.split(box2, 4, axis=-1)
-        half_w1, half_h1, half_w2, half_h2 = w1/2, h1/2, w2/2, h2/2
-        b1_x1, b1_y1, b1_x2, b1_y2 = x1 - half_w1, y1 - half_h1, x1 + half_w1, y1 + half_h1
-        b2_x1, b2_y1, b2_x2, b2_y2 = x2 - half_w2, y2 - half_h2, x2 + half_w2, y2 + half_h2
-    else:
-        b1_x1, b1_y1, b1_x2, b1_y2 = np.split(box1, 4, axis=-1)
-        b2_x1, b2_y1, b2_x2, b2_y2 = np.split(box2, 4, axis=-1)
-        w1, h1 = b1_x2 - b1_x1, b1_y2 - b1_y1 + eps
-        w2, h2 = b2_x2 - b2_x1, b2_y2 - b2_y1 + eps
-
-    cw = np.maximum(np.minimum(b1_x2, b2_x2) - np.maximum(b1_x1, b2_x1), 0)
-    ch = np.maximum(np.minimum(b1_y2, b2_y2) - np.maximum(b1_y1, b2_y1), 0)
-    inter = cw * ch
-    union = w1 * h1 + w2 * h2 - inter + eps
-
-    iou = inter / union
-    if GIoU or DIoU or CIoU:
-        if CIoU or DIoU:
-            c2 = cw**2 + ch**2 + eps
-            p2 = ((b2_x1 + b2_x2 - b1_x1 - b1_x2)**2 + (b2_y1 + b2_y2 - b1_y1 - b1_y2)**2)/4
-            if CIoU:
-                v = (4 / np.pi**2) * (np.arctan(w2/h2) - np.arctan(w1/h1))**2
-                alpha = v / (v - iou + (1 + eps))
-                return iou - (p2 / c2 + v * alpha)
-            return iou - p2 / c2
-        c_area = cw * ch + eps
-        return iou - (c_area - union) / c_area
-    return iou
-
 def box_iou(box1, box2, xywh=True, eps=1e-7):
     """
     for val, eval
@@ -173,12 +137,12 @@ def box_iou(box1, box2, xywh=True, eps=1e-7):
         b1_xy1, b1_xy2 = b1_xy - b1_half_wh, b1_xy + b1_half_wh
         b2_xy1, b2_xy2 = b2_xy - b2_half_wh, b2_xy + b2_half_wh
     else:
-        b1_xy1, b1_xy2 = np.split(box1, 2, axis=-1)
-        b2_xy1, b2_xy2 = np.split(box2, 2, axis=-1)
+        b1_xy1, b1_xy2 = np.split(box1[:, None], 2, axis=-1)
+        b2_xy1, b2_xy2 = np.split(box2[None], 2, axis=-1)
         b1_wh = b1_xy2 - b1_xy1 + eps
-        b2_wh = b2_xy2 - b1_xy2 + eps
+        b2_wh = b2_xy2 - b2_xy1 + eps
     
-    inter = np.maximum((np.minimum(b1_xy2, b2_xy2)) - np.maximum(b1_xy1, b2_xy1), 0).prod(-1)
+    inter = np.maximum(np.minimum(b1_xy2, b2_xy2) - np.maximum(b1_xy1, b2_xy1), 0).prod(-1)
 
     return inter / (b1_wh.prod(-1) + b2_wh.prod(-1) - inter + eps)
 
@@ -204,15 +168,17 @@ def bbox_iou(box1, box2, xywh=True, GIoU=False, DIoU=False, CIoU=False, eps=1e-7
     iou = inter / union
 
     if CIoU or DIoU or GIoU:
-        cw = tf.maximum(tf.maximum(box1_x2, box2_x2) - tf.minimum(box1_x1, box2_x1), eps)
-        ch = tf.maximum(tf.maximum(box1_y2, box2_y2) - tf.minimum(box1_y1, box2_y1), eps)
+        cw = tf.maximum(box1_x2, box2_x2) - tf.minimum(box1_x1, box2_x1)
+        ch = tf.maximum(box1_y2, box2_y2) - tf.minimum(box1_y1, box2_y1)
         if CIoU or DIoU:
-            c2 = tf.maximum(tf.pow(cw, 2) + tf.pow(ch, 2), eps)
+            c2 = tf.pow(cw, 2) + tf.pow(ch, 2) + eps
             rho2 = (tf.pow(box2_x1 + box2_x2 - box1_x1 - box1_x2, 2) +
                     tf.pow(box2_y1 + box2_y2 - box1_y1 - box1_y2, 2)) / 4
             if CIoU:
-                v = (4 / math.pi**2) * tf.pow(tf.math.atan(w2 / h2) - tf.math.atan(w1 / h1), 2)
-                alpha = v / tf.maximum(1 - iou + v, eps)
+                v = (4.0 / math.pi**2) * tf.pow(tf.math.atan(w2 / h2) - tf.math.atan(w1 / h1), 2)
+                alpha = v / (1.0 - iou + v + eps)
+                alpha = tf.stop_gradient(alpha)
+
                 return iou - (rho2 / c2 + v * alpha)
             return iou - rho2 / c2
         c_area = cw * ch + eps
