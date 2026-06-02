@@ -109,7 +109,7 @@ class Conv(Layer):
             self.act = Identity()
 
     def call(self, x, training=False):
-        return self.act(self.bn(self.conv(x), training))
+        return self.act(self.bn(self.conv(x), training=training))
 
 class Identity(Layer):
     def __init__(self):
