@@ -32,7 +32,7 @@ class DFLDetectionLoss():
 
         gt_labels, gt_bboxes = tf.split(gts, [1, 4], axis=-1)
         gt_bboxes = xywh2xyxy(gt_bboxes) * tf.tile(img_size, [2])
-        mask_gt = tf.cast(gt_labels >= 0, tf.float32)
+        mask_gt = tf.cast(tf.reduce_sum(gt_bboxes, axis=-1, keepdims=True) > 0, tf.float32)
     
         _, target_bboxes, target_scores, fg_mask, _ = self.sampler.sampling(tf.sigmoid(pred_scores), 
                                                                             pred_bboxes * strides, 

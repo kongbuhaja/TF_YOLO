@@ -61,7 +61,7 @@ class Validator(Handler):
         
         for b, pred in enumerate(nms_preds):
             labels, pred = batch_labels[b], pred.numpy()
-            labels = labels[labels[..., 0] != -1]
+            labels = labels[np.sum(labels[..., 1:5], -1) > 0]
             
             t_cls, t_boxes = labels[:, 0].astype(int), xywh2xyxy(labels[:, 1:]) * whwh
             p_boxes, conf, p_cls = pred[:, :4], pred[:, 4], pred[:, 5].astype(int)
@@ -104,7 +104,7 @@ class Validator(Handler):
         self.env.update_info()
 
         self.images += len(batch_labels)
-        self.instances += np.sum(batch_labels[..., 0] != -1)
+        self.instances += np.sum(np.sum(batch_labels[..., 1:5], -1) > 0)
 
         log = {"Ins/Img": f"{self.instances}/{self.images}",
                **self.avg_loss_items,

@@ -12,7 +12,6 @@ class Handler():
         self.dataset = dataset
         self.split = split
         self.logger = Logger(self.split)
-        # data = self.dataset.load(self.split, self.cfg.cache, self.cfg.workers)
         data = self.dataset.load("val", self.cfg.cache, self.cfg.workers)
     
         self.dataloader = Dataloader(cfg, data)
@@ -30,10 +29,6 @@ class Handler():
         os.makedirs(self.cfg.path, exist_ok=True)
 
     def on_epoch_start(self):
-        # self.pbar = ProgressBar(self.dataloader,
-        #                         task=self.cfg.task.upper(),
-        #                         split=self.split,
-        #                         headers=self.logger.keys)
         self.images = 0
         self.instances = 0
 

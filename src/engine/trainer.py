@@ -68,7 +68,7 @@ class Trainer(Handler):
     def on_iteration_end(self, epoch, loss_items, batch_labels):
         def log_update():
             self.images += len(batch_labels)
-            self.instances += np.sum(batch_labels[..., 0] != -1)
+            self.instances += np.sum(np.sum(batch_labels[..., 1:5], -1) > 0)
 
             log = {"Epoch": f"{epoch+1}/{self.cfg.epochs}",
                    "Ins/Img": f"{self.instances}/{self.images}",
