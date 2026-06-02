@@ -560,7 +560,7 @@ class Segment_to_task(Transform):
         xywh = []
         for coord in data["coords"]:
             xy1, xy2 = np.min(coord, 0), np.max(coord, 0)
-            xywh.append(np.hstack([(xy1 + xy2) / 2, (xy2 - xy1)]))
+            xywh.append(np.hstack([(xy1 + xy2) / 2, xy2 - xy1]))
         bboxes = np.hstack([data["class_ids"][:, None], np.array(xywh, np.float32)]) if data["class_ids"].shape[0] else np.zeros([0, 5])
         return bboxes
     
@@ -639,13 +639,12 @@ class Batch(Transform):
             serialized_boxes: [bboxes_1, bboxes_2, ..., bboxes_b]
                 boxes: np.array(n, 5)
         output:
-            batch_bboxes: np.array(b, max_det, 5) [c, x, y, w h]
+            batch_bboxes: np.array(b, max_det, 5) [c, x, y, w, h]
         """
         B = len(serialized_bboxes)
         lengths = [bboxes.shape[0] for bboxes in serialized_bboxes]
         max_det = self.max_det if self.max_det else max(lengths) 
         result = np.zeros([B, max_det, 5], dtype=np.float32)
-        result[..., 0] = -1
         
         for b, (bboxes, length) in enumerate(zip(serialized_bboxes, lengths)):
             valid_len = min(max_det, length)
