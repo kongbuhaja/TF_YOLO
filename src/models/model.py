@@ -12,10 +12,19 @@ class Model(tf.keras.Model):
         self.weight = cfg.weight
         # self._input_shape = np.array(cfg.input_shape)
         self.modules, self.info = parse_model(cfg)
-        self.build([1, *cfg.input_shape])
+        for i, m in enumerate(self.modules):
+            setattr(self, f"_m{i}", m)
+
+        self.build(cfg.input_shape)
         self.e2e = getattr(self.modules[-1], "e2e", False)
         self.nc = getattr(self.modules[-1], "nc")
         self.initialize_bias()
+
+    def build(self, input_shape):
+        if not hasattr(self, "built") or not self.built:
+            super().build([1, *input_shape])
+            self(tf.zeros([1, *input_shape]), training=True)
+            self.built = True
 
     def call(self, x, normalize=True, training=False):
         x = self.normalize(x) if normalize else x

@@ -13,6 +13,9 @@ class Sequential(Layer):
         else:
             self.layers = list(layers)
 
+        for i, l in enumerate(self.layers):
+            setattr(self, f"_s{i}", l)
+
     def call(self, x, training=False):
         for layer in self.layers:
             x = layer(x, training=training)
@@ -22,6 +25,9 @@ class ModuleList(Layer):
     def __init__(self, layers=None):
         super().__init__()
         self.layers = list(layers) if layers else []
+
+        for i, l in enumerate(self.layers):
+            setattr(self, f"_m{i}", l)
         
     def __iter__(self):
         return iter(self.layers)
