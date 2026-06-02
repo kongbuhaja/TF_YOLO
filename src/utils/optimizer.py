@@ -41,8 +41,7 @@ class Optimizer():
             name = self.name.lower()
             model = opt_dict[name]
 
-        args = {"learning_rate": self.scheduler,
-                "global_clipnorm": 10.0}
+        args = {"learning_rate": self.scheduler}
         
         if name == "sgd":
             args["momentum"] = self.beta

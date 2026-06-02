@@ -308,4 +308,7 @@ class Env():
         return f"{self.info['gpus']['temp']:.{p}f}°C"
     
     def __del__(self):
-        pynvml.nvmlShutdown()
+        try:
+            pynvml.nvmlShutdown()
+        except TypeError:
+            pass
