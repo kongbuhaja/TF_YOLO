@@ -15,12 +15,12 @@ class Validator(Handler):
         try:
             self.on_epoch_start()
 
-            for i, data in enumerate(self.pbar):
+            for data in self.pbar:
                 batch_image, batch_labels = data["image"], data["labels"]
 
                 total_loss, loss_items = self.validate_step(batch_image, batch_labels)
 
-                self.on_iteration_end(i, loss_items, batch_labels)
+                self.on_iteration_end(loss_items, batch_labels)
         
             self.on_epoch_end()
 
@@ -77,6 +77,7 @@ class Validator(Handler):
             
     def on_epoch_start(self):
         super().on_epoch_start()
+        self.step = 0
 
         self.stats = {"tp": [],
                       "conf": [],
@@ -93,10 +94,10 @@ class Validator(Handler):
     def on_epoch_end(self):
         super().on_epoch_end()
 
-    def on_iteration_end(self, i, loss_items, batch_labels):
+    def on_iteration_end(self, loss_items, batch_labels):
         for k, v in loss_items.items():
             if k in self.avg_loss_items:
-                self.avg_loss_items[k] = (self.avg_loss_items[k] * i + v) / (i+1) 
+                self.avg_loss_items[k] = (self.avg_loss_items[k] * self.step + v) / (self.step + 1) 
             else:
                 self.avg_loss_items[k] = v
 
@@ -115,9 +116,8 @@ class Validator(Handler):
             
             log["mAP50"] = self.metric.map50
             log["mAP50:95"] = self.metric.map
-        else:
-            log["mAP50"] = self.pbar.current
-            log["mAP50:95"] = self.pbar.total
             
         self.logger.update(**log)
         self.pbar.set_status(**self.logger.data)
+
+        self.step += 1
