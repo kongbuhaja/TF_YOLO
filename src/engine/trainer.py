@@ -11,35 +11,36 @@ class Trainer(Handler):
         # super().__init__(env, model, cfg, dataset, "val")
         self.loss = DFLDetectionLoss(model, cfg.loss)
         self.steps_per_epoch = len(self.dataloader)
+        self.global_step = 0
         self.total_steps = self.cfg.epochs * self.steps_per_epoch
         self.optimizer = Optimizer(cfg, self.total_steps, self.steps_per_epoch)
 
-        self.make_dir(self.model.model_name)
+        self.validator = Validator(self.env, self.model, self.cfg, self.dataset) if self.cfg.period > 0 else None
 
-        if self.cfg.period > 0 :
-            self.validator = Validator(self.env, self.model, self.cfg, self.dataset)
-        else:
-            self.validator = None
+
+        self.make_dir(self.model.model_name)
         
     def train(self):
-        try:            
+        try:
             for epoch in range(self.cfg.epochs):
                 self.on_epoch_start()
 
                 for data in self.pbar:
                     batch_image, batch_labels = data["image"], data["labels"]
-                    
+
+                    self.on_iteration_start()
+
                     total_loss, loss_items = self.train_step(batch_image, batch_labels)
 
                     self.on_iteration_end(epoch, loss_items, batch_labels)
-                
+
                 self.on_epoch_end(epoch)
 
         except Exception as e:
             total_loss, loss_items = 0.0, {}
             print(f"Training loop iterrupted: {e}")
             raise e
-        
+
         return total_loss, loss_items
 
     @tf.function
@@ -47,7 +48,7 @@ class Trainer(Handler):
         with tf.GradientTape() as tape:
             raw_preds = self.model(batch_image, training=True)
             total_loss, loss_items = self.loss(raw_preds, batch_labels)
-            
+
         gradients = tape.gradient(total_loss, self.model.trainable_variables)
         self.optimizer.model.apply_gradients(zip(gradients, self.model.trainable_variables))
         
@@ -61,6 +62,9 @@ class Trainer(Handler):
         if self.validator and epoch % self.cfg.period == 0:
             self.validator.validate()
 
+    def on_iteration_start(self):
+        self.optimizer.update(self.global_step)
+
     def on_iteration_end(self, epoch, loss_items, batch_labels):
         def log_update():
             self.images += len(batch_labels)
@@ -71,11 +75,11 @@ class Trainer(Handler):
                    "LR": self.optimizer.lr,
                    **loss_items,
                    **self.env.get_info()}
-            
+
             self.logger.update(**log)
 
         self.env.update_info()
         log_update()
         self.pbar.set_status(**self.logger.data)
 
-        
+        self.global_step += 1

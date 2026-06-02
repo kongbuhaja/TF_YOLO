@@ -65,11 +65,22 @@ class Optimizer():
             beta = self.warmup_beta + (self.beta - self.warmup_beta) * progress
 
             if hasattr(self.model, "momentum"):
-                self.model.momentum.assign(beta)
+                if isinstance(self.model.momentum, tf.Variable):
+                    self.model.momentum.assign(beta)
+                else:
+                    self.model.momentum = beta
+
             elif hasattr(self.model, "beta_1"):
-                self.model.beta_1.assign(beta)
+                if isinstance(self.model.beta_1, tf.Variable):
+                    self.model.beta_1.assign(beta)
+                else:
+                    self.model.beta_1 = beta
+
             elif hasattr(self.model, "rho"):
-                self.model.rho.assign(beta)
+                if isinstance(self.model.rho, tf.Variable):
+                    self.model.rho.assign(beta)
+                else:
+                    self.model.rho = beta
 
     @property
     def lr(self):
