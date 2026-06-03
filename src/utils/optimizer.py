@@ -34,12 +34,12 @@ class Optimizer():
         }
 
         try:
-            model = opt_dict[self.name.lower()]
+            opt = opt_dict[self.name.lower()]
         except:
-            print(f"Optimizer '{self.name} not found. Defaulting to 'SGD'.")
+            print(f"Optimizer '{self.name}' not found. Defaulting to 'SGD'.")
             self.name = "SGD"
             name = self.name.lower()
-            model = opt_dict[name]
+            opt = opt_dict[name]
 
         args = {"learning_rate": self.scheduler}
         
@@ -54,7 +54,7 @@ class Optimizer():
             args["rho"] = self.beta
             args["weight_decay"] = self.weight_decay
             
-        self.model = model(**args)
+        self.model = opt(**args)
 
     def update(self, step):
         step = tf.cast(step, tf.float32)
