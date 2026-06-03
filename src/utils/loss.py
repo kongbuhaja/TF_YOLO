@@ -34,12 +34,12 @@ class DFLDetectionLoss():
         gt_bboxes = xywh2xyxy(gt_bboxes) * tf.tile(img_size, [2])
         mask_gt = tf.cast(tf.reduce_sum(gt_bboxes, axis=-1, keepdims=True) > 0, tf.float32)
     
-        _, target_bboxes, target_scores, fg_mask, _ = self.sampler.sampling(tf.sigmoid(pred_scores), 
-                                                                            pred_bboxes * strides, 
-                                                                            anchors * strides, 
-                                                                            gt_labels, 
-                                                                            gt_bboxes, 
-                                                                            mask_gt)
+        _, target_bboxes, target_scores, fg_mask, _ = self.sampler.sampling(tf.sigmoid(tf.stop_gradient(pred_scores)), 
+                                                                             tf.stop_gradient(pred_bboxes) * strides, 
+                                                                             anchors * strides, 
+                                                                             gt_labels, 
+                                                                             gt_bboxes, 
+                                                                             mask_gt)
         
         norm = tf.maximum(tf.reduce_sum(target_scores), 1)
         weight = tf.reduce_sum(target_scores, -1)
