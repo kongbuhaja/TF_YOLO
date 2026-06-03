@@ -30,17 +30,12 @@ class ProgressBar:
             
         self.values = {header: "" for header in self.headers}
 
-        self.avg_rate = 0.0
-        self.smoothing = 0.3
-
     def __len__(self):
         return self.total
 
     def _initiate(self):
         self.start_time = time.time()
         self.current = 0
-        self.last_print_time = 0
-        self.avg_rate = 0.0
         self.first_print = True
 
     def __iter__(self):
@@ -58,10 +53,18 @@ class ProgressBar:
 
     def set_status(self, **kwargs):
         for key, value in kwargs.items():
+            if key not in self.headers:
+                self.headers.append(key)
             if isinstance(value, float):
                 self.values[key] = f"{value:.5f}"
             else:
                 self.values[key] = str(value)
+
+    def _col_width(self):
+        w = 0
+        for h in self.headers:
+            w = max(w, len(h), len(str(self.values.get(h, ""))))
+        return max(w + 2, 10)
 
     def _format_time(self, seconds):
         if seconds is None: return "??"
@@ -74,53 +77,44 @@ class ProgressBar:
     def _print_lines(self, force=False):
         now = time.time()
         
-        if not force and (now - self.last_print_time < self.min_interval):
+        if not force and (now - getattr(self, "last_print_time", 0) < self.min_interval):
             return
-
-        dt = now - self.last_print_time
-        dn = 1 
-        
-        current_rate = dn / dt if dt > 0 else 0
-        
-        if self.avg_rate is None:
-            self.avg_rate = current_rate
-        else:
-            self.avg_rate = (1 - self.smoothing) * self.avg_rate + self.smoothing * current_rate
 
         self.last_print_time = now 
         
         elapsed = now - self.start_time
-        if self.avg_rate > 0:
-            remaining = (self.total - self.current) / self.avg_rate
+        rate_disp = self.current / elapsed if elapsed > 0 else 0
+        if rate_disp > 0:
+            remaining = (self.total - self.current) / rate_disp
         else:
             remaining = 0
-            
-        rate_disp = self.avg_rate if self.avg_rate is not None else 0
 
         percent = int((self.current / self.total) * 100) if self.total > 0 else 0
         prefix = f"{int(percent)}%|"
         suffix = f"| {self.current}/{self.total} [{self._format_time(elapsed)}<{self._format_time(remaining)}, {rate_disp:.2f}it/s]"
         
-        width = len(self.headers) * self.ncols if self.headers else len(prefix) + len(suffix) + 5
+        ncols = self._col_width()
+        
+        width = len(self.headers) * ncols if self.headers else len(prefix) + len(suffix) + 5
         bar_len = width - len(prefix) - len(suffix)
         if bar_len < 0: bar_len = 0
         
         fill = (bar_len * self.current // self.total) if self.total > 0 else 0
         bar_char = "█" * fill + "░" * (bar_len - fill)
         
-        line1 = f"{self.task:>{self.ncols-3}} | "
+        line1 = f"{self.task:>{ncols-3}} | "
         for h in self.headers:
-            line1 += f"{h:<{self.ncols}}"
+            line1 += f"{h:<{ncols}}"
             
-        line2 = f"{self.split:>{self.ncols-3}} | "
+        line2 = f"{self.split:>{ncols-3}} | "
         for h in self.headers:
             val = self.values.get(h, "")
-            line2 += f"{val:<{self.ncols}}"
+            line2 += f"{val:<{ncols}}"
             
         if self.current >= self.total:
-            line3 = f"{'Done':>{self.ncols-3}} | "
+            line3 = f"{'Done':>{ncols-3}} | "
         else:
-            line3 = f"{'Running':>{self.ncols-3}} | "
+            line3 = f"{'Running':>{ncols-3}} | "
         line3 += f"{prefix}{bar_char}{suffix}"
         
         lines = [line for line in [line1, line2, line3] if line.strip()]
@@ -136,12 +130,10 @@ class ProgressBar:
 
     def terminal_clear(self, lines):
         if not self.first_print:
-            # \033[nA -> overwrite n line
             sys.stdout.write(f"\033[{len(lines)}A") 
         else:
             self.first_print = False
 
     def terminal_print(self, lines):
-        # \033[K -> erase background
         for line in lines:
             sys.stdout.write(f"{line}\033[K\n")
