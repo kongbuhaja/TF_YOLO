@@ -2,13 +2,13 @@ from src.engine.handler import Handler
 from src.engine.validator import Validator
 from src.utils.loss import DFLDetectionLoss
 from src.utils.optimizer import Optimizer
+from src.utils.monitor import Monitor
 import tensorflow as tf
 import numpy as np
 
 class Trainer(Handler):
     def __init__(self, env, model, cfg, dataset):
         super().__init__(env, model, cfg, dataset, "train")
-        # super().__init__(env, model, cfg, dataset, "val")
         self.loss = DFLDetectionLoss(model, cfg.loss)
         self.steps_per_epoch = len(self.dataloader)
         self.global_step = 0
@@ -17,9 +17,10 @@ class Trainer(Handler):
 
         self.validator = Validator(self.env, self.model, self.cfg, self.dataset) if self.cfg.period > 0 else None
 
-
         self.make_dir(self.model.model_name)
-        
+        self.monitor = Monitor(self.cfg.path)
+        self.best_map = 0.0
+
     def train(self):
         try:
             for epoch in range(self.cfg.epochs):
@@ -51,26 +52,47 @@ class Trainer(Handler):
 
         gradients = tape.gradient(total_loss, self.model.trainable_variables)
         self.optimizer.model.apply_gradients(zip(gradients, self.model.trainable_variables))
-        
+
         return total_loss, loss_items
-    
+
     def on_epoch_start(self):
         super().on_epoch_start()
+        self.step = 0
+        self.avg_loss_items = {}
 
     def on_epoch_end(self, epoch):
         super().on_epoch_end()
+
+        train_losses = {k: float(v) for k, v in self.avg_loss_items.items()}
+        val_losses = {}
+        val_metrics = {}
+        lr = float(self.optimizer.lr)
+
         if self.validator and epoch % self.cfg.period == 0:
-            self.validator.validate()
+            val_losses, val_metrics = self.validator.validate()
+
+            current_map = val_metrics.get("mAP", 0.0)
+            if self.save_model(epoch, self.best_map, current_map):
+                self.best_map = current_map
+
+        self.monitor.log_epoch(epoch, train_losses, val_losses, val_metrics, lr)
 
     def on_iteration_start(self):
         self.optimizer.update(self.global_step)
 
     def on_iteration_end(self, epoch, loss_items, batch_labels):
+        for k, v in loss_items.items():
+            v = float(v)
+            if k in self.avg_loss_items:
+                self.avg_loss_items[k] = (self.avg_loss_items[k] * self.step + v) / (self.step + 1)
+            else:
+                self.avg_loss_items[k] = v
+
         def log_update():
             self.images += len(batch_labels)
             self.instances += np.sum(np.sum(batch_labels[..., 1:5], -1) > 0)
 
-            log = {"Epoch": f"{epoch+1}/{self.cfg.epochs}",
+            log = {"Epoch": f"{epoch + 1}/{self.cfg.epochs}",
                    "Ins/Img": f"{self.instances}/{self.images}",
                    "LR": self.optimizer.lr,
                    **loss_items,
@@ -82,4 +104,5 @@ class Trainer(Handler):
         log_update()
         self.pbar.set_status(**self.logger.data)
 
+        self.step += 1
         self.global_step += 1

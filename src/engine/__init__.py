@@ -17,15 +17,12 @@ __all__ = (
 
 class Engine():
     def __init__(self, **kwargs):
-        # default
         self.cfg = Config(**kwargs)
         self.env = Env(self.cfg.environment)
         self.model = Model(self.cfg.model)
         self.dataset = Dataset(self.cfg.data)
-        
+
         self.trainer = Trainer(self.env, self.model, self.cfg, self.dataset)
-        # self.validator = Validator(self.env, self.model, self.cfg, self.dataset)
-        # self.evaluator = Evaluator(self.cfg, self.dataset)
 
         global cfg
         cfg = self.cfg
