@@ -38,7 +38,7 @@ class Trainer(Handler):
 
         except Exception as e:
             total_loss, loss_items = 0.0, {}
-            print(f"Training loop iterrupted: {e}")
+            print(f"Training loop interrupted: {e}")
             raise e
 
         return total_loss, loss_items
