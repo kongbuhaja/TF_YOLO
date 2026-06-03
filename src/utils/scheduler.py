@@ -65,7 +65,7 @@ class Scheduler(LearningRateSchedule):
             "name": self.name,
             "lri": self.lri,
             "lrf": self.lrf,
-            "total_step": self.total_step,
-            "warmup_step": self.warmup_step,
+            "total_steps": self.total_steps,
+            "warmup_steps": self.warmup_steps,
             "warmup_bias_lr": self.warmup_bias_lr
         }
