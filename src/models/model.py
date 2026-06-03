@@ -10,7 +10,6 @@ class Model(tf.keras.Model):
         super().__init__()
         self.model_name = cfg.name + cfg.scale
         self.weight = cfg.weight
-        # self._input_shape = np.array(cfg.input_shape)
         self.modules, self.info = parse_model(cfg)
         for i, m in enumerate(self.modules):
             setattr(self, f"_m{i}", m)
@@ -19,6 +18,9 @@ class Model(tf.keras.Model):
         self.e2e = getattr(self.modules[-1], "e2e", False)
         self.nc = getattr(self.modules[-1], "nc")
         self.initialize_bias()
+
+    def get_config(self):
+        return {}
 
     def build(self, input_shape):
         if not hasattr(self, "built") or not self.built:
@@ -90,6 +92,7 @@ class Model(tf.keras.Model):
         
         for cols in zip(*sheet):
             print(step.join([f"{data:<{length}}" for data, length in zip(cols, lengths)]))
+        print("="*length, end="\n\n")
 
 class Empty_model():
     def __call__(self, data):

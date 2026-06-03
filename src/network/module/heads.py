@@ -16,20 +16,20 @@ class DFL_Detect(Layer):
         
         c2, c3 = max((16, in_ch[0] // 4, self.reg_max * 4)), max(in_ch[0], min(self.nc, 100))
         self.cv2 = ModuleList(
-            Sequential(Conv(ch, c2, 3), 
+            SequentialLayer(Conv(ch, c2, 3), 
                        Conv(c2, c2, 3), 
                        Conv(c2, self.reg_max * 4, 1, bn=False, act=False)) for ch in in_ch
         )
         
         if light:
             self.cv3 = ModuleList(
-                Sequential(Sequential(Conv(ch, ch, 3, g=ch), Conv(ch, c3, 1)),
-                           Sequential(Conv(c3, c3, 3, g=c3), Conv(c3, c3, 1)),
+                SequentialLayer(SequentialLayer(Conv(ch, ch, 3, g=ch), Conv(ch, c3, 1)),
+                           SequentialLayer(Conv(c3, c3, 3, g=c3), Conv(c3, c3, 1)),
                            Conv(c3, self.nc, 1, bn=False, act=False)) for ch in in_ch
             )
         else:
             self.cv3 = ModuleList(
-                Sequential(Conv(ch, c3, 3),
+                SequentialLayer(Conv(ch, c3, 3),
                            Conv(c3, c3, 3),
                            Conv(c3, self.nc, 1, bn=False, act=False)) for ch in in_ch
             )
@@ -43,14 +43,15 @@ class DFL_Detect(Layer):
         if self.e2e:
             pass
         
+        xi = []
         for i in range(self.nl):
-            x[i] = tf.concat([self.cv2[i](x[i], training=training),
-                              self.cv3[i](x[i], training=training)], -1)
+            xi.append(tf.concat([self.cv2[i](x[i], training=training),
+                                 self.cv3[i](x[i], training=training)], -1))
         
         if training:
-            return x
+            return xi
         
-        return self.postprocess(x), x
+        return self.postprocess(xi), xi
             
     def postprocess(self, x):
         shape = tf.shape(x[0])

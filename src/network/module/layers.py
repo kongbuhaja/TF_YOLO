@@ -1,11 +1,11 @@
 import math
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, MaxPool2D, Concatenate, UpSampling2D
+from tensorflow.keras.layers import Layer, Conv2D, BatchNormalization, MaxPool2D, Concatenate, UpSampling2D, Identity
 from tensorflow.keras.initializers import HeUniform
 from src.network.module.activations import *
 
-class Sequential(Layer):
+class SequentialLayer(Layer):
     def __init__(self, *layers):
         super().__init__()
         if len(layers) == 1 and not isinstance(layers[0], Layer):
@@ -15,6 +15,11 @@ class Sequential(Layer):
 
         for i, l in enumerate(self.layers):
             setattr(self, f"_s{i}", l)
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"layers": self.layers})
+        return config
 
     def call(self, x, training=False):
         for layer in self.layers:
@@ -28,6 +33,13 @@ class ModuleList(Layer):
 
         for i, l in enumerate(self.layers):
             setattr(self, f"_m{i}", l)
+
+        self.built = True
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({"layers": self.layers})
+        return config
         
     def __iter__(self):
         return iter(self.layers)
@@ -111,12 +123,6 @@ class Conv(Layer):
     def call(self, x, training=False):
         return self.act(self.bn(self.conv(x), training=training))
 
-class Identity(Layer):
-    def __init__(self):
-        super().__init__()
-
-    def call(self, x, training=False):
-        return x
 
 class Bottleneck(Layer):
     def __init__(self, in_ch, out_ch, shortcut=True, g=1, k=(3, 3), e=0.5):
@@ -150,8 +156,8 @@ class SPPF(Layer):
 class PSABlock(Layer):
     def __init__(self, ch, num_heads=4, attn_ratio=0.5, shortcut=True):
         super().__init__()
-        self.attn = Attention(ch, num_heads, attn_ratio)
-        self.ffn = Sequential([Conv(ch, ch * 2, 1), Conv(ch * 2, ch, 1, act=False)])
+        self.attn = AttentionLayer(ch, num_heads, attn_ratio)
+        self.ffn = SequentialLayer([Conv(ch, ch * 2, 1), Conv(ch * 2, ch, 1, act=False)])
         self.add = shortcut
 
     def call(self, x, training=False):
@@ -161,10 +167,12 @@ class PSABlock(Layer):
         else:
             return self.ffn(self.attn(x, training), training)
 
-class Attention(Layer):
+class AttentionLayer(Layer):
     def __init__(self, dim, num_heads=8, attn_ratio=0.5):
         super().__init__()
+        self.dim = dim
         self.num_heads = num_heads
+        self.attn_ratio = attn_ratio
         self.head_dim = dim // num_heads
         self.key_dim = int(self.head_dim * attn_ratio)
         self.scale = self.key_dim**-0.5
@@ -174,8 +182,14 @@ class Attention(Layer):
         self.pe = Conv(dim, dim, 3, 1, g=dim, act=False)
         self.proj = Conv(dim, dim, 1, act=False)
 
+    def get_config(self):
+        config = super().get_config()
+        config.update({"dim": self.dim, "num_heads": self.num_heads, "attn_ratio": self.attn_ratio})
+        return config
+
     def call(self, x, training=False):
-        B, H, W, C = x.shape
+        B, H, W = tf.unstack(tf.shape(x)[:3])
+        C = x.shape[-1]
         N = H * W
         
         qkv = tf.reshape(self.qkv(x, training), [B, N, self.num_heads, self.key_dim * 2 + self.head_dim])
@@ -189,13 +203,13 @@ class Attention(Layer):
         return self.proj(x + pe, training)
 
 base_modules = {
-    "sequential": Sequential,
+    "sequential": SequentialLayer,
     "modulelist": ModuleList,
     "conv": Conv,
     "bottleneck": Bottleneck,
     "sppf": SPPF,
     "psablock": PSABlock,
-    "attention": Attention,
+    "attention": AttentionLayer,
 }
 
 fusion_modules = {
