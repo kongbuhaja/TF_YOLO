@@ -4,7 +4,7 @@ num_processes: 1
 
 model: yolo11n.yaml
 data: coco
-epochs: 600
+epochs: 30
 close_mosaic: 1
 workers: 8
 batch_size: &batch_size 32
