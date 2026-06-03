@@ -123,9 +123,11 @@ class COCO(Data):
                     image_id = anno_data["image_id"]
                     category_id = anno_data["category_id"]
                     segments = anno_data["segmentation"]
+                    combined = []
                     for segment in segments:
-                        data[dtype][image_id]["segments"].append([categories[category_id],
-                                                                  segment])
+                        combined.extend(segment)
+                    data[dtype][image_id]["segments"].append([categories[category_id],
+                                                               combined])
             print("Done.")
         return data, category_map
 
