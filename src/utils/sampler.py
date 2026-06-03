@@ -70,7 +70,7 @@ class Sampler():
         target_bboxes = tf.gather(gt_bboxes_flat, target_gt_indices_flat)
 
         target_labels_clamped = tf.maximum(target_labels, 0)
-        target_scores = tf.one_hot(target_labels_clamped, depth=self.nc, dtype=tf.float32)
+        target_scores = tf.one_hot(tf.cast(target_labels_clamped, tf.int32), depth=self.nc, dtype=tf.float32)
 
         fg_scores_mask = tf.tile(fg_mask[:, :, None], [1, 1, self.nc])
         target_scores = tf.where(fg_scores_mask, target_scores, 0.0)
