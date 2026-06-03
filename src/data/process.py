@@ -505,7 +505,7 @@ class Filter(Transform):
 
         if self.ratio:
             if len(data["coords"]) == 0:
-                data["coords"] = []
+                return data
 
             size = data["image"].shape[:2][::-1]
             if (self.ratio > 1.0).any():
