@@ -739,7 +739,7 @@ def get_transform(name, args):
         transform = Read_image()
         # args = not args
     elif name == "mosaic":
-        transform = Mosaic(*args)
+        transform = Mosaic(args)
     elif name == "crop":
         transform = Crop(*args)
     elif name == "random_perspective":
@@ -749,18 +749,18 @@ def get_transform(name, args):
         transform = Random_HSV(*args)
         args = sum(args)
     elif name == "flip_ud":
-        transform = Flip_ud(*args)
+        transform = Flip_ud(args)
     elif name == "flip_lr":
-        transform = Flip_lr(*args)
+        transform = Flip_lr(args)
     
     elif name == "resize_padding":
         transform = Resize_padding(*args)
     elif name == "unsqueeze_coords":
         transform = Unsqueeze_coords()
     elif name == "filter":
-        transform = Filter(*args)
+        transform = Filter(args)
     elif name == "segment_to_task":
-        transform = Segment_to_task(*args)
+        transform = Segment_to_task(args)
     
     elif name == "batch":
         transform = Batch(*args)

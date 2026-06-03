@@ -41,18 +41,18 @@ loss:
   dfl: 1.5
 
 augmentation:
-  mosaic: [*input_shape] # (input_shape)
+  mosaic: *input_shape # (input_shape)
   random_perspective: [0, 0.1, 0.5, 0, 0] #(rotate, translate, scale, shear, perspective)
   random_hsv: [0.15, 0.7, 0.4] # (+/- H, S, V)
-  flip_ud: [0.0] # (prob)
-  flip_lr: [0.5] # (prob)
+  flip_ud: 0.0 # (prob)
+  flip_lr: 0.5 # (prob)
   
 # process:
 #   resize_padding: [*input_shape, *constant, True] # (input_shape, constant, center)
 
 process:
-  filter: [0.02]
-  segment_to_task: [*task]
+  filter: 10 # pixel or ratio
+  segment_to_task: *task
 
 postprocess:
   batch: [*task, *max_det]
