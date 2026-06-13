@@ -83,6 +83,9 @@ class Config:
     def items(self):
         return self.__dict__.items()
 
+    def __getitem__(self, key):
+        return getattr(self, str(key))
+
 def _get_model_file(file_name):
     def _get_all_files(path):
         files = {}
