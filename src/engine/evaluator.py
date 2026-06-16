@@ -41,21 +41,16 @@ class Evaluator(Handler):
 
                 rx, ry, l, t = info
                 pad, ratio = np.array([l, t], pred.dtype), np.array([rx, ry], pred.dtype)
-
-                for cls_id, box, conf in zip(
-                    pred[:, 5].astype(int), pred[:, :4], pred[:, 4]
-                ):
-                    xy = ((box[:2] - box[2:4] / 2) - pad) / ratio
-                    wh = box[2:4] / ratio
-                    box_original = np.concatenate([xy, wh])
-
-                    pred_json = {
-                        "image_id": int(image_id),
-                        "category_id": self.category_map[cls_id]["id"],
-                        "bbox": box_original.tolist(),
-                        "score": float(conf),
-                    }
-                    preds_json_list.append(pred_json)
+                bboxes = np.concatenate([(pred[:, :2] - pad) / ratio, 
+                                         (pred[:, 2:4] - pred[:, :2]) / ratio], axis=-1)
+                confs, class_ids = pred[:, 4], pred[:, 5]
+                
+                pred_json = [{"image_id": int(image_id),
+                              "category_id": self.category_map[int(cls_id)]["id"],
+                              "bbox": bbox.tolist(),
+                              "score": float(conf)} for bbox, conf, cls_id in zip(bboxes, confs, class_ids)]
+                
+                preds_json_list.extend(pred_json)
 
                 if is_new_gt:
                     labels = data["labels"][b]
