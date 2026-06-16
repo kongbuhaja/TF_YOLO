@@ -2,13 +2,13 @@
 
 # todo
 - [x] implement detection dataloader
-- [ ] implement detection augmentation
-- [ ] implement parse result to pycocotools
+- [x] implement detection augmentation
+- [x] implement parse result to pycocotools
 - [x] visualize image
-- [ ] implement v11 model
-- [ ] implement loss
-- [ ] implement metrics
-- [ ] implement engine
-- [ ] implement logger
+- [x] implement v11 model
+- [x] implement loss
+- [x] implement metrics
+- [x] implement engine
+- [x] implement logger
 - [ ] implement all models
 - [ ] implement optional model (like rtdetr)
