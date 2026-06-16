@@ -93,16 +93,16 @@ class Mosaic(Transform):
     """
     Combine 4 images to 1 mosaic image in 2x2 grid.
     """
-    def __init__(self, image_size):
+    def __init__(self, target_size):
         """
         input:
-            image_size: final image size
+            target_size: final image size
         """
-        self.image_size = np.array(image_size[:2], np.int32)
-        self.mosaic_size = (self.image_size * 2).astype(np.int32)
+        self.target_size = np.array(target_size[:2], np.int32)
+        self.mosaic_size = (self.target_size * 2).astype(np.int32)
         self.div = self.mosaic_size.astype(np.float32)
         self.c_range = (0.4, 0.6)
-        self.crop = get_transform("crop", [self.image_size, 0.2, 0.3])[0]
+        self.crop = get_transform("crop", [self.target_size, 0.2, 0.3])[0]
 
     def apply(self, serialized_data):
         """
@@ -114,7 +114,7 @@ class Mosaic(Transform):
                     coords: np.array(n, 2) squeezed coords
                     lengths: np.array(m,) indices of coords to unsqueeze
         output:
-            mosaic_image: np.array(*self.image_size, 3)
+            mosaic_image: np.array(*self.target_size, 3)
             mosaic_class_ids: np.array(k,)
             mosaic_coords: np.array(l, 2) squeezed coords
             mosaic_lengths: np.array(k,) indices of coords to unsqueeze
@@ -159,13 +159,13 @@ class Crop(Transform):
     """
     Crop the image based on low and high.
     """
-    def __init__(self, new_image_size, low, high):
+    def __init__(self, target_size, low, high):
         """
         input:
-            new_image_size: final image_size if it is smaller than calculated size
-            low, high: ratio of the [left, top] point ([right, bottom]: min(left, top + new_image_size, image_size)
+            target_size: final image_size if it is smaller than calculated size
+            low, high: ratio of the [left, top] point ([right, bottom]: min(left, top + target_size, image_size)
         """
-        self.crop_size = np.array(new_image_size, np.int32)[:2] if new_image_size is not None else None
+        self.crop_size = np.array(target_size, np.int32)[:2] if target_size is not None else None
         self.low, self.high = low, high
 
     def apply(self, data):
@@ -178,7 +178,7 @@ class Crop(Transform):
                 lengths: np.array(m,) indices of coords to unsqueeze
         output:
             data: dict()
-                image: np.array(*self.new_image_size, 3)
+                image: np.array(*self.target_size, 3)
                 class_ids: np.array(m,)
                 coords: np.array(n, 2) squeezed coords
                 lengths: np.array(m,) indices of coords to unsqueeze
@@ -402,14 +402,14 @@ class Resize_padding(Transform):
     """
     Resize image with padding for final image size
     """
-    def __init__(self, image_size, constant=0, center=True):
+    def __init__(self, target_size, constant=0, center=True):
         """
         inputs:
-            image_size: final image size
+            target_size: final image size
             center: flag of image with center position
             constant: padding value
         """
-        self.image_size = np.array(image_size[:2], np.float32)
+        self.target_size = np.array(target_size[:2], np.float32)
         self.center = center
         self.constant = constant
 
@@ -423,30 +423,30 @@ class Resize_padding(Transform):
                 lengths: np.array(m,) indices of coords to unsqueeze
         output:
             data: dict()
-                image: np.array(*self.image_size, 3)
+                image: np.array(*self.target_size, 3)
                 class_ids: np.array(m,)
                 coords: np.array(n, 2) squeezed coords
                 lengths: np.array(m,) indices of coords to unsqueeze
         """
         org_size = np.array(data["image"].shape[:2][::-1], np.float32)
-        if (self.image_size == org_size).all():
+        if (self.target_size == org_size).all():
             return data
         
-        ratio = self.image_size / max(org_size)
+        ratio = self.target_size / max(org_size)
         resize_size = (ratio * org_size).astype(np.int32)
-        pad_size = self.image_size.astype(np.int32) - resize_size
+        pad_size = self.target_size.astype(np.int32) - resize_size
 
         pad_ratio = 0.5 if self.center else np.random.uniform() 
         pad_LT = (pad_size * pad_ratio).astype(np.int32)
         l, t = pad_LT
         r, b = l + resize_size[0], t + resize_size[1]
 
-        new_image = np.full((*self.image_size.astype(np.int32), 3), self.constant, np.uint8)
+        new_image = np.full((*self.target_size.astype(np.int32), 3), self.constant, np.uint8)
         new_image[t:b, l:r] = cv2.resize(data["image"], resize_size)
         data["image"] = new_image
         
-        mult = org_size * ratio / self.image_size
-        add = pad_LT.astype(np.float32) / self.image_size
+        mult = org_size * ratio / self.target_size
+        add = pad_LT.astype(np.float32) / self.target_size
 
         data["coords"] = data["coords"] * mult + add
         return data
@@ -677,13 +677,13 @@ class Normalize(Transform):
     
 # for eval or test
 class Resize_padding_with_info(Transform):
-    def __init__(self, image_size, constant):
+    def __init__(self, target_size, constant):
         """
         inputs:
-            image_size: final image size
+            target_size: final image size
             constant: padding value
         """
-        self.image_size = np.array(image_size[:2], np.float32)
+        self.target_size = np.array(target_size[:2], np.float32)
         self.constant = constant
 
     def apply(self, data):
@@ -696,7 +696,7 @@ class Resize_padding_with_info(Transform):
                 lengths: np.array(m,) indices of coords to unsqueeze
         output:
             data: dict()
-                image: np.array(*self.image_size, 3)
+                image: np.array(*self.target_size, 3)
                 class_ids: np.array(m,)
                 coords: np.array(n, 2) squeezed coords
                 lengths: np.array(m,) indices of coords to unsqueeze
@@ -706,16 +706,16 @@ class Resize_padding_with_info(Transform):
         mult = org_size
         data["coords"] = data["coords"] * mult
 
-        if (self.image_size == org_size).all():
+        if (self.target_size == org_size).all():
             data["info"] = (1.0, 1.0, 0, 0)
             return data
         
-        ratio = self.image_size / max(org_size)
+        ratio = self.target_size / max(org_size)
         resize_size = (ratio * org_size).astype(np.int32)
-        l, t = ((self.image_size.astype(np.int32) - resize_size) * 0.5).astype(np.int32)
+        l, t = ((self.target_size - resize_size) * 0.5).astype(np.int32)
         r, b = l + resize_size[0], t + resize_size[1]
 
-        new_image = np.full((*self.image_size.astype(np.int32), 3), self.constant, np.uint8)
+        new_image = np.full((*self.target_size.astype(np.int32), 3), self.constant, np.uint8)
         new_image[t:b, l:r] = cv2.resize(data["image"], resize_size)
         data["image"] = new_image
 
