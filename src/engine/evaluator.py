@@ -1,68 +1,74 @@
 from src.engine.handler import Handler
+from src.utils.util import NMS
 import numpy as np
 from tqdm import tqdm
 
+
 class Evaluator(Handler):
-    def __init__(self, cfg, dataset):
-        super().__init__(cfg, dataset, "eval")
+    def __init__(self, env, model, cfg, dataset):
+        super().__init__(env, model, cfg, dataset, "eval")
 
-    def __call__(self, model=None):
-        model = model if self.model is None else model
-        try:
-            preds_json_list = []
-            is_new_gt = not self.dataset.check_gt()
-            for data in tqdm(self.dataloader,
-                            total=len(self.dataloader),
-                            desc=f"Evaluate {self.data.name} data"):
-                
-                for b, (image_id, image, info) in enumerate(zip(data["image_id"], data["image"], data["info"])):
-                    # 나중에 model로 이식
-                    # rx, ry, l, t = info
-                    # h, w = image.shape[:2]
-                    # size = np.array([w, h], np.float32)
-                    # org_size = (size - np.array([l, t], np.float32)*2) / (rx, ry)
-                    # add = np.array([0, -l, -t, 0, 0], np.float32)
-                    # mult = np.array([1, w, h, w, h], np.float32)
-                    # div = np.array([1, rx, ry, rx, ry], np.float32)
-                    # preds = (data["labels"][data["labels"][:, 0] == b][:, 1:] * mult + add) / div
-                    preds = data["labels"][data["labels"][:, 0] == b][:, 1:]
-                    # gts = (data["labels"][data["labels"][:, 0] == b][:, 1:] * mult + add) / div
-                    
-                    # pred
-                    image_id = int(image_id)
-                    for class_id, box in zip(preds[:, 0], preds[:, 1:]):
-                        box[:2] -= box[2:]/2
-                        pred_json = {"image_id": image_id,
-                                    "category_id": self.category_map[class_id]["id"],
-                                    "bbox": box.tolist(),
-                                    "score": 1.0}
-                        preds_json_list.append(pred_json)
+    def evaluate(self):
+        self._is_exist_dir()
+        pred_json_path = self.eval_path / f"predictions.json"
 
-                    # gt
-                    if is_new_gt:
-                        gts = data["labels"][data["labels"][:, 0] == b][:, 1:]
-                        self.dataset.add_gt(image_id, image, gts)
+        if not pred_json_path.exists():
+            self._evaluate_step(pred_json_path)
 
-            if is_new_gt:
-                self.dataset.save_gts()
-            
-            preds_json_path = model.path / "predictions.json"
-            self.dataset.util.save_result(preds_json_path, preds_json_list)
-            self.dataset.eval_metric(preds_json_path)
-            
-                    # import matplotlib.pyplot as plt
-                    # import pdb
-                    # import cv2
-                    # image = (image*255).astype(np.uint8)
-                    # image = image[int(t):int(h-t), int(l):int(w-l)]
-                    # image = cv2.resize(image, org_size.astype(np.int32))
-                    # for x,y,w,h in labels[:, 1:]:
-                    #     x1, y1 = int(x - w/2), int(y - h/2)
-                    #     x2, y2 = int(x + w/2), int(y + h/2)
-                    #     cv2.rectangle(image, (x1, y1), (x2, y2), (255, 0, 0), 2)
-                    # plt.imshow(image)
-                    # plt.show()
-                    # pdb.set_trace()
-        finally:
-            self.dataloader.on_epoch_end()
-    
+        self._compute_metrics(pred_json_path)
+
+    def _evaluate_step(self, pred_json_path):
+        preds_json_list = []
+        is_new_gt = not self.dataset.is_exist_gt()
+
+        for data in tqdm(self.dataloader,
+                         total=len(self.dataloader),
+                         desc="Evaluating"):
+            batch_image = data["image"]
+
+            preds, _ = self.model(batch_image.astype(np.float32), training=False)
+
+            nms_preds = NMS(preds,
+                            conf_th=self.cfg.conf_th,
+                            iou_th=self.cfg.iou_th,
+                            max_det=self.cfg.max_det,
+                            nc=self.model.nc)
+
+            for b, (image_id, image, pred, info) in enumerate(zip(data["image_id"], data["image"], nms_preds, data["info"])):
+                pred = pred.numpy()
+                if len(pred) == 0:
+                    continue
+
+                rx, ry, l, t = info
+
+                for cls_id, box, conf in zip(
+                    pred[:, 5].astype(int), pred[:, :4], pred[:, 4]
+                ):
+                    xy = (box[:2] - np.array([l, t])) / np.array([rx, ry])
+                    wh = box[2:4] / np.array([rx, ry])
+                    box_original = np.concatenate([xy - wh / 2, wh])
+
+                    pred_json = {
+                        "image_id": int(image_id),
+                        "category_id": self.category_map[cls_id]["id"],
+                        "bbox": box_original.tolist(),
+                        "score": float(conf),
+                    }
+                    preds_json_list.append(pred_json)
+
+                if is_new_gt:
+                    labels = data["labels"][b]
+                    labels = labels[np.sum(labels[..., 1:5], -1) > 0]
+                    self.dataset.add_gt(int(image_id), image, labels)
+
+        if is_new_gt:
+            self.dataset.save_gts()
+
+        self.dataset.util.save_data(str(pred_json_path), preds_json_list)
+
+    def _compute_metrics(self, pred_json_path):
+        self.dataset.eval_metric(pred_json_path)
+
+    def _is_exist_dir(self):
+        self.eval_path = self.model.path / "evaluation"
+        self.eval_path.mkdir(parents=True, exist_ok=True)

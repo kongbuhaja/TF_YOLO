@@ -1,4 +1,4 @@
-import os, math
+import os, math, shutil
 import tensorflow as tf
 from pathlib import Path
 from src.network import *
@@ -19,8 +19,8 @@ class Model(tf.keras.Model):
         self.nc = getattr(self.modules[-1], "nc")
         self.initialize_bias()
 
-    def get_config(self):
-        return {}
+        self._setup_path(cfg)
+        self.load_model_path(cfg.saved_path)
 
     def build(self, input_shape):
         if not hasattr(self, "built") or not self.built:
@@ -37,6 +37,46 @@ class Model(tf.keras.Model):
             x = module(x, training)
             y.append(x)
         return x
+
+    def _setup_path(self, cfg):
+        saved_path = getattr(cfg, "saved_path", None)
+
+        if saved_path:
+            self.path = saved_path.parent.parent
+            self.weights_path = saved_path.parent
+        else:
+            base = Path.cwd().resolve() / "results"
+            os.makedirs(base, exist_ok=True)
+            n = sum([d.startswith(self.model_name) for d in os.listdir(base)])
+            self.path = base / f"{self.model_name}{n}"
+            self.weights_path = self.path / "weights"
+
+        os.makedirs(self.path, exist_ok=True)
+
+    def save_model(self, checkpoint):
+        path = self.weights_path / (f"epoch{checkpoint}" if isinstance(checkpoint, int) else checkpoint)
+        self.save_model_path(path)
+
+    def save_model_path(self, path):
+        if path.exists():
+            shutil.rmtree(str(path))
+        self.save(str(path))
+
+    def load_model(self, checkpoint="last"):
+        path = self.weights_path / checkpoint
+        self.load_model_path(path)
+
+    def load_model_path(self, path):
+        if path is None:
+            return
+        elif not path.exists():
+            print(f"Checkpoint not found: {path}, so weights are initiated")
+        var_path = path / "variables" / "variables"
+        self.load_weights(str(var_path))
+        print(f"Loaded weights from {path}")
+
+    def get_config(self):
+        return {}
     
     def normalize(self, x):
         return tf.cast(x, tf.float32) / 255.0
@@ -74,7 +114,6 @@ class Model(tf.keras.Model):
 
 
         def get_length(target):
-            # return int(np.ceil(max(len(x) for x in target)/5)*5)
             return max(len(x) for x in target)
         sheet = [indices, froms, repeats, params, modules, args]
         lengths = [get_length(indices), get_length(froms), get_length(repeats),
@@ -105,7 +144,7 @@ def parse_model(cfg):
     is_torch = cfg.file.parents[1].name == "torch"
 
     layers, channels, strides, indices, args = [], [], [], [], []
-    for idx, (f, r, m, arg) in enumerate(cfg.backbone + cfg.head): # [from, repeats, module, args]
+    for idx, (f, r, m, arg) in enumerate(cfg.backbone + cfg.head):
         r = max(round(r * depth), 1)
         
         module = m.lower().split(".")[-1]
@@ -147,7 +186,7 @@ def parse_model(cfg):
 
         elif module in head_modules.keys():
             assert hasattr(cfg, "nc"), "Please set nc in your model.yaml."
-            if module == "detect": # 버전별로 detect면 원래의 detect로 하고 dfl_detect면 dfl_detect로
+            if module == "detect":
                 module = "dfl_detect"
                 e2e = getattr(cfg, "e2e", False)
             elif module == "v10detect":
@@ -176,4 +215,3 @@ def parse_model(cfg):
 
 def make_divisible(x, div):
     return math.ceil(x / div) * div
-    

@@ -3,6 +3,7 @@ from src.cfg import Config
 from src.utils import Env
 from src.data import Dataset
 from src.models import Model
+from pathlib import Path
 
 from src.engine.validator import Validator
 from src.engine.evaluator import Evaluator
@@ -15,6 +16,7 @@ __all__ = (
     "Evaluator",
 )
 
+
 class Engine():
     def __init__(self, **kwargs):
         self.cfg = Config(**kwargs)
@@ -22,13 +24,15 @@ class Engine():
         self.model = Model(self.cfg.model)
         self.dataset = Dataset(self.cfg.data)
 
-        self.trainer = Trainer(self.env, self.model, self.cfg, self.dataset)
-
-        global cfg
-        cfg = self.cfg
-
     def train(self):
+        if not hasattr(self, "trainer"):
+            self.trainer = Trainer(self.env, self.model, self.cfg, self.dataset)
         self.trainer.train()
+
+    def evaluate(self):
+        if not hasattr(self, "evaluator"):
+            self.evaluator = Evaluator(self.env, self.model, self.cfg, self.dataset)
+        self.evaluator.evaluate()
 
     def on_epoch_start(self):
         self.dataloader.on_epoch_start()
@@ -46,3 +50,7 @@ class Engine():
             del self.model
         if hasattr(self, "trainer"):
             del self.trainer
+        if hasattr(self, "evaluator"):
+            del self.evaluator
+        if hasattr(self, "dataset"):
+            del self.dataset

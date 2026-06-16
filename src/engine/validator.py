@@ -2,6 +2,7 @@ from src.engine.handler import Handler
 from src.utils.metric import ap_per_class, box_iou, Metrics
 from src.utils.util import NMS, xywh2xyxy
 import numpy as np
+import tensorflow as tf
 
 class Validator(Handler):
     def __init__(self, env, model, cfg, dataset):
@@ -16,14 +17,14 @@ class Validator(Handler):
         self.loss = self._build_loss()
 
         try:
-            self.on_epoch_start()
+            self._on_epoch_start()
 
             for data in self.pbar:
                 batch_image, batch_labels = data["image"], data["labels"]
-                total_loss, loss_items = self.validate_step(batch_image, batch_labels)
-                self.on_iteration_end(loss_items, batch_labels)
+                total_loss, loss_items = self._validate_step(batch_image, batch_labels)
+                self._on_iteration_end(loss_items, batch_labels)
 
-            self.on_epoch_end()
+            self._on_epoch_end()
 
         except Exception as e:
             print(f"Validation loop interrupted: {e}")
@@ -35,7 +36,8 @@ class Validator(Handler):
         from src.utils.loss import DFLDetectionLoss
         return DFLDetectionLoss(self.model, self.cfg.loss)
 
-    def validate_step(self, batch_image, batch_labels):
+    # @tf.function
+    def _validate_step(self, batch_image, batch_labels):
         def match(iou, t_cls, p_cls):
             correct = np.zeros((p_cls.shape[0], self.iouv.shape[0])).astype(bool)
             correct_mask = p_cls == t_cls[:, None]
@@ -82,8 +84,8 @@ class Validator(Handler):
 
         return total_loss, loss_items
 
-    def on_epoch_start(self):
-        super().on_epoch_start()
+    def _on_epoch_start(self):
+        super()._on_epoch_start()
         self.step = 0
 
         self.stats = {"tp": [],
@@ -97,10 +99,10 @@ class Validator(Handler):
 
         self.logger.update(**{"mAP50": "", "mAP50:95": ""})
 
-    def on_epoch_end(self):
-        super().on_epoch_end()
+    def _on_epoch_end(self):
+        super()._on_epoch_end()
 
-    def on_iteration_end(self, loss_items, batch_labels):
+    def _on_iteration_end(self, loss_items, batch_labels):
         for k, v in loss_items.items():
             if k in self.avg_loss_items:
                 self.avg_loss_items[k] = (self.avg_loss_items[k] * self.step + v) / (self.step + 1)
