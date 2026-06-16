@@ -1,10 +1,8 @@
 task: &task bbox # bbox, segment
 
-num_processes: 1
-
 model: yolo11n.yaml
 data: coco
-epochs: 2
+epochs: 100
 close_mosaic: 1
 workers: 8
 batch_size: &batch_size 32
@@ -17,7 +15,7 @@ iou_th: 0.7
 constant: &constant 0 # (0-255) it can be list
 max_det: &max_det 300
 period: 1 # save, valid model period
-retrain: False # folder -> retrain for stoped model, pb file -> get pretrained weight and train
+resume: False # start new train with loaded weight or continue training
 
 optimizer: 
   name: SGD # SGD, Adam, AdamW, AdamW, Adamax, NAdam, RMSProp

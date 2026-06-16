@@ -40,16 +40,17 @@ class Config:
                 setattr(self, key, value)
                 
         if hasattr(self, "model") and isinstance(self.model, (str, Path)):
-            file, scale, weight = _get_model_file(self.model)
+            file, scale, weight, saved_path = _get_model_file(self.model)
             
-            inp_shape = getattr(self, "input_shape", None)
+            input_shape = getattr(self, "input_shape", None)
             
             self.model = Config(
                 name=file.stem,
                 file=file, 
                 scale=scale,
                 weight=weight,
-                input_shape=inp_shape
+                input_shape=input_shape,
+                saved_path=saved_path
             )
 
         if hasattr(self, "data") and isinstance(self.data, (str, Path)):
@@ -71,7 +72,6 @@ class Config:
         for key, value in self.items():
             text += f"self.{key}: "
             if isinstance(value, Config):
-                # 중첩된 Config 객체 출력 (들여쓰기 추가)
                 text += "".join(f"\n    {line}" for line in str(value).split("\n"))
             elif isinstance(value, dict):
                 text += "".join(f"\n    {k}: {v}" for k, v in value.items())
@@ -86,35 +86,76 @@ class Config:
     def __getitem__(self, key):
         return getattr(self, str(key))
 
+def _get_all_files(path):
+    files = {}
+    for file in os.listdir(path):
+        if os.path.isdir(path / file):
+            files.update(_get_all_files(path / file))
+        elif os.path.isfile(path / file):
+            files[file] = (path / file)
+    return files
+
+
 def _get_model_file(file_name):
-    def _get_all_files(path):
-        files = {}
-        for file in os.listdir(path):
-            if os.path.isdir(path / file):
-                files.update(_get_all_files(path / file))
-            elif os.path.isfile(path / file):
-                files[file] = (path / file)
-        return files
+    def _is_saved_model_dir(path):
+        return path.is_dir() and (path / "saved_model.pb").exists()
         
-    file_path = Path(file_name)
+    file_path = Path(file_name).resolve()
     model_name, ext = file_path.stem, file_path.suffix
 
+    if _is_saved_model_dir(file_path):
+        return _resolve_saved_model(file_path)
+
     if ext != ".yaml" and ext != "":
-        return file_path, None, True
+        return file_path, None, True, file_path.parent
 
     files = _get_all_files(MODELS)
     
-    pattern = re.compile(r"^(.*)([nsmlx])$|^(.+)$")
+    pattern = re.compile(r"^(.*?)([nsmlx])?$")
     match = pattern.match(model_name)
-    name, scale = (match.group(1), match.group(2)) if match.group(1) is not None else (match.group(3), None)
+    if match:
+        name, scale = match.groups()
+        if scale is None:
+            scale = "n"
     file = Path(name).with_suffix(".yaml").name
 
     if os.path.exists(file_path):
-        return file_path, scale, False
+        return file_path, None, False, None
     elif file in files:
-        return files[file], scale, False
+        return files[file], scale, False, None
     else:
         raise FileNotFoundError(f"Model error | unknown model {file}")
+
+
+def _resolve_saved_model(file_path):
+    weights_dir = file_path.parent
+    project_dir = weights_dir.parent
+    dir_name = project_dir.name
+
+    m = re.match(r"^(.+[nsmlx])(\d+)$", dir_name)
+    if m:
+        full_name = m.group(1)
+    else:
+        full_name = dir_name
+
+    pattern = re.compile(r"^(.*)([nsmlx])$|^(.+)$")
+    m2 = pattern.match(full_name)
+    if m2.group(1) is not None:
+        model_name = m2.group(1)
+        scale = m2.group(2)
+    else:
+        model_name = m2.group(3)
+        scale = None
+
+    files = _get_all_files(MODELS)
+    yaml_name = Path(model_name).with_suffix(".yaml").name
+    if yaml_name not in files:
+        raise FileNotFoundError(
+            f"Model error | cannot find YAML '{yaml_name}' "
+            f"(resolved from directory '{dir_name}')"
+        )
+
+    return files[yaml_name], scale, False, file_path
 
 
 __all__ = (
