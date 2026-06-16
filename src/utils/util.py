@@ -123,7 +123,7 @@ def NMS(batch_preds,
         output.append(result)
 
         if (time.time() - start_time) > time_limit:
-            print(f"WARNING ⚠️ NMS time limit {time_limit:.3f}s exceeded")
+            print(f"WARNING! NMS time limit {time_limit:.3f}s exceeded")
             break
 
     return output
