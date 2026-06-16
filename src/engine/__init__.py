@@ -26,13 +26,23 @@ class Engine():
 
     def train(self):
         if not hasattr(self, "trainer"):
-            self.trainer = Trainer(self.env, self.model, self.cfg, self.dataset)
+            self.trainer = self.generate_handler("trainer")
         self.trainer.train()
 
     def evaluate(self):
         if not hasattr(self, "evaluator"):
-            self.evaluator = Evaluator(self.env, self.model, self.cfg, self.dataset)
+            self.evaluator = self.generate_handler("evaluator")
         self.evaluator.evaluate()
+
+    def generate_handler(self, role):
+        handler_map = {"trainer": Trainer,
+                       "validator": Validator,
+                       "evaluator": Evaluator}
+        
+        if role not in handler_map:
+            raise ValueError(f"{role} is not supported")
+
+        return handler_map[role](self.env, self.model, self.cfg, self.dataset)
 
     def on_epoch_start(self):
         self.dataloader.on_epoch_start()
