@@ -9,35 +9,9 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 class Data():
     def __init__(self):
-        self.eval_metric = self.coco_eval
+        self.eval_metric = coco_eval
 
-    def coco_eval(self, gt_json_path, dt_json_path, ann_type="bbox"):
-        from pycocotools.coco import COCO
-        from pycocotools.cocoeval import COCOeval
-        import io
-        from contextlib import redirect_stdout
-
-        summary_path = dt_json_path.parent / "evaluation.log"
-        coco_gt = COCO(gt_json_path)
-        coco_dt = coco_gt.loadRes(str(dt_json_path))
-
-        coco_eval = COCOeval(coco_gt, coco_dt, ann_type)
-        img_ids = sorted(coco_gt.getImgIds())
-        coco_eval.params.imgIds = img_ids
-
-        output_buffer = io.StringIO()
-        with redirect_stdout(output_buffer):
-            coco_eval.evaluate()
-            coco_eval.accumulate()
-            coco_eval.summarize()
-        
-        result = output_buffer.getvalue()
-
-        with open(summary_path, "w") as f:
-            f.write(result)
-        print(result)
-
-    def save_result(self, path, result):
+    def save_data(self, path, result):
         with open(path, "w") as f:
             json.dump(result, f)        
 
@@ -169,5 +143,31 @@ class COCO(Data):
         path = path / "category_map.yaml"
         with open(path, "w") as f:
             yaml.safe_dump(category_map, f)
+
+def coco_eval(gt_json_path, dt_json_path, ann_type="bbox"):
+    from pycocotools.coco import COCO
+    from pycocotools.cocoeval import COCOeval
+    import io
+    from contextlib import redirect_stdout
+
+    summary_path = dt_json_path.parent / "evaluation.log"
+    coco_gt = COCO(gt_json_path)
+    coco_dt = coco_gt.loadRes(str(dt_json_path))
+
+    coco_eval = COCOeval(coco_gt, coco_dt, ann_type)
+    img_ids = sorted(coco_gt.getImgIds())
+    coco_eval.params.imgIds = img_ids
+
+    output_buffer = io.StringIO()
+    with redirect_stdout(output_buffer):
+        coco_eval.evaluate()
+        coco_eval.accumulate()
+        coco_eval.summarize()
+    
+    result = output_buffer.getvalue()
+
+    with open(summary_path, "w") as f:
+        f.write(result)
+    print(result)
 
 utils = {"coco": COCO}

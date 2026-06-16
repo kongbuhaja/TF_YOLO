@@ -24,7 +24,7 @@ class Dataset():
         data["split"] = split
         return data
     
-    def check_gt(self):
+    def is_exist_gt(self):
         if os.path.exists(self.dirs["eval"]):
             return True
         self.gt_images_json_list = []
@@ -58,7 +58,7 @@ class Dataset():
                "annotations": self.gt_annos_json_list,
                "categories": self.gt_categories_list,
                "info": self.gt_info}
-        self.util.save_result(self.dirs["eval"], gts)
+        self.util.save_data(self.dirs["eval"], gts)
 
     def eval_metric(self, pred_json_path):
         self.util.eval_metric(self.dirs["eval"], pred_json_path)
