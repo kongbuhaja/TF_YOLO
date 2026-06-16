@@ -40,7 +40,7 @@ class Evaluator(Handler):
                     continue
 
                 rx, ry, l, t = info
-                pad, ratio = np.array([l, t], pred.dtype), np.array([rx, ry], pred.dtpye)
+                pad, ratio = np.array([l, t], pred.dtype), np.array([rx, ry], pred.dtype)
 
                 for cls_id, box, conf in zip(
                     pred[:, 5].astype(int), pred[:, :4], pred[:, 4]

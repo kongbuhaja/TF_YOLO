@@ -11,6 +11,8 @@ class Handler():
         self.dataset = dataset
         self.split = split
         self.logger = Logger(split)
+
+        # this is for test.
         if split == "val" or split == "train":
             data = self.dataset.load("val", cfg.cache, cfg.workers)
         else:
