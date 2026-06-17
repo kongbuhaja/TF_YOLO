@@ -29,7 +29,7 @@ class Evaluator(Handler):
             preds, _ = self.model(batch_image.astype(np.float32), training=False)
 
             nms_preds = NMS(preds,
-                            conf_th=self.cfg.conf_th,
+                            conf_th=0.001,
                             iou_th=self.cfg.iou_th,
                             max_det=self.cfg.max_det,
                             nc=self.model.nc)
