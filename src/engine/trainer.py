@@ -2,11 +2,10 @@ from src.engine.handler import Handler
 from src.engine.validator import Validator
 from src.utils.loss import DFLDetectionLoss
 from src.utils.optimizer import Optimizer
-from src.utils.monitor import Monitor
-import tensorflow as tf
 from pathlib import Path
 import numpy as np
 import yaml
+import tensorflow as tf
 
 class Trainer(Handler):
     def __init__(self, env, model, cfg, dataset):
@@ -16,7 +15,7 @@ class Trainer(Handler):
         self.global_step = 0
         self.total_steps = self.cfg.epochs * self.steps_per_epoch
         self.optimizer = Optimizer(cfg, self.total_steps, self.steps_per_epoch)
-        self.monitor = Monitor(self.model.path)
+        self.monitor.set_output_path(self.model.path)
 
         self.validator = Validator(self.env, self.model, self.cfg, self.dataset) if self.cfg.period > 0 else None
         self.best_map = 0.0
@@ -92,7 +91,7 @@ class Trainer(Handler):
             else:
                 self.avg_loss_items[k] = v
 
-        if self.step + 1 == len(self.par):
+        if self.step + 1 == len(self.pbar):
             loss_items = self.avg_loss_items
             
         def log_update():
@@ -105,11 +104,11 @@ class Trainer(Handler):
                    **loss_items,
                    **self.env.get_info()}
 
-            self.logger.update(**log)
+            self.monitor.update(**log)
 
         self.env.update_info()
         log_update()
-        self.pbar.set_status(**self.logger.data)
+        self.pbar.set_status(**self.monitor.data)
 
         self.step += 1
         self.global_step += 1

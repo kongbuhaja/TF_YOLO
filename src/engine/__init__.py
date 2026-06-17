@@ -3,7 +3,6 @@ from src.cfg import Config
 from src.utils import Env
 from src.data import Dataset
 from src.models import Model
-from pathlib import Path
 
 from src.engine.validator import Validator
 from src.engine.evaluator import Evaluator

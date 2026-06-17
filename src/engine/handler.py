@@ -1,5 +1,5 @@
 from src.data import Dataloader
-from src.utils.logger import Logger
+from src.utils.monitor import Monitor
 from src.utils.progress import ProgressBar
 
 
@@ -10,7 +10,7 @@ class Handler():
         self.cfg = cfg
         self.dataset = dataset
         self.split = split
-        self.logger = Logger(split)
+        self.monitor = Monitor(split)
 
         # this is for test.
         if split == "val" or split == "train":
@@ -23,7 +23,7 @@ class Handler():
         self.pbar = ProgressBar(self.dataloader,
                                 task=cfg.task.upper(),
                                 split=split,
-                                headers=self.logger.keys)
+                                headers=self.monitor.keys)
 
     def _on_epoch_start(self):
         self.images = 0

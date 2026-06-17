@@ -61,7 +61,7 @@ class Validator(Handler):
             nms_preds = preds
         else:
             nms_preds = NMS(preds,
-                            conf_th=0.001,
+                            conf_th=self.cfg.conf_th,
                             iou_th=self.cfg.iou_th,
                             max_det=self.cfg.max_det,
                             nc=self.model.nc)
@@ -97,7 +97,7 @@ class Validator(Handler):
         self.val_loss_items = {}
         self.val_metrics = {}
 
-        self.logger.update(**{"mAP50": "", "mAP50:95": ""})
+        self.monitor.update(**{"mAP50": "", "mAP50:95": ""})
 
     def _on_epoch_end(self):
         super()._on_epoch_end()
@@ -136,7 +136,7 @@ class Validator(Handler):
                                 "mAP50": map50,
                                 "mAP": map_val}
 
-        self.logger.update(**log)
-        self.pbar.set_status(**self.logger.data)
+        self.monitor.update(**log)
+        self.pbar.set_status(**self.monitor.data)
 
         self.step += 1
