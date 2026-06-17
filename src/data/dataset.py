@@ -1,11 +1,10 @@
 import numpy as np
 import os, yaml
 from pathlib import Path
-from tqdm import tqdm
+from src.utils.progress import ProgressBar
 from src.data.util import utils
 import cv2
-from multiprocessing import Pool
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 
 class Dataset():
     def __init__(self, cfg):
@@ -65,7 +64,6 @@ class Dataset():
 
     def read_data(self, split, cache, workers):
         self.cache = cache
-        data = []
 
         _split = "val" if split == "eval" else split
         image_dir = getattr(self.dirs, _split)
@@ -74,23 +72,42 @@ class Dataset():
 
         results = []
         image_files = os.listdir(image_dir)
-        total = len(image_files)
+        num_images = 0
+        num_instances = 0
 
         if workers > 1:
             with ThreadPoolExecutor(max_workers=workers) as executor:
                 futures = [executor.submit(self.read_file, image_dir, image_file) for image_file in image_files]
                 
-                for it in tqdm(as_completed(futures),
-                               total=total,
-                               desc=f"Reading data for {split}"):
-                    results.append(it.result())
+                pbar = ProgressBar(futures,
+                                   task="READ",
+                                   split=split.upper(),
+                                   headers=["Dataset", "Images", "Instances"])
+                for it in pbar:
+                    result = it.result()
+                    results.append(result)
+                    num_images += 1
+                    if result is not None:
+                        num_instances += len(result["class_ids"])
+                    pbar.set_status(Dataset=self.name,
+                                    Images=num_images,
+                                    Instances=num_instances)
         
         else:
-            for image_file in tqdm(image_files,
-                                   total=total,
-                                   desc=f"Reading data for {split}"):
-                results.append(self.read_file(image_dir, image_file))
-        
+            pbar = ProgressBar(image_files,
+                               task="READ",
+                               split=split.upper(),
+                               headers=["Dataset", "Images", "Instances"])
+            for image_file in pbar:
+                result = self.read_file(image_dir, image_file)
+                results.append(result)
+                num_images += 1
+                if result is not None:
+                    num_instances += len(result["class_ids"])
+                pbar.set_status(Dataset=self.name,
+                                Images=num_images,
+                                Instances=num_instances)
+
         data = [r for r in results if r is not None]
         disregared_count = len(results) - len(data)
         print(f"We read {len(data)} images without {disregared_count} images, which does not have labels.")

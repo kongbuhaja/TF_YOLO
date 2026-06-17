@@ -1,7 +1,6 @@
 from src.engine.handler import Handler
 from src.utils.util import NMS
 import numpy as np
-from tqdm import tqdm
 
 
 class Evaluator(Handler):
@@ -21,15 +20,16 @@ class Evaluator(Handler):
         preds_json_list = []
         is_new_gt = not self.dataset.is_exist_gt()
 
-        for data in tqdm(self.dataloader,
-                         total=len(self.dataloader),
-                         desc="Evaluating"):
+        total_images = len(self.dataloader)
+        total_dets = 0
+
+        for i, data in enumerate(self.pbar):
             batch_image = data["image"]
 
             preds, _ = self.model(batch_image.astype(np.float32), training=False)
 
             nms_preds = NMS(preds,
-                            conf_th=0.001,
+                            conf_th=self.cfg.conf_th,
                             iou_th=self.cfg.iou_th,
                             max_det=self.cfg.max_det,
                             nc=self.model.nc)
@@ -41,21 +41,28 @@ class Evaluator(Handler):
 
                 rx, ry, l, t = info
                 pad, ratio = np.array([l, t], pred.dtype), np.array([rx, ry], pred.dtype)
-                bboxes = np.concatenate([(pred[:, :2] - pad) / ratio, 
+                bboxes = np.concatenate([(pred[:, :2] - pad) / ratio,
                                          (pred[:, 2:4] - pred[:, :2]) / ratio], axis=-1)
                 confs, class_ids = pred[:, 4], pred[:, 5]
-                
+
                 pred_json = [{"image_id": int(image_id),
                               "category_id": self.category_map[int(cls_id)]["id"],
                               "bbox": bbox.tolist(),
                               "score": float(conf)} for bbox, conf, cls_id in zip(bboxes, confs, class_ids)]
-                
+
                 preds_json_list.extend(pred_json)
+                total_dets += len(pred_json)
 
                 if is_new_gt:
                     labels = data["labels"][b]
                     labels = labels[np.sum(labels[..., 1:5], -1) > 0]
                     self.dataset.add_gt(int(image_id), image, labels)
+
+            self.env.update_info()
+            self.monitor.update(images=f"{i + 1}/{total_images}",
+                                dets=total_dets,
+                                **self.env.get_info())
+            self.pbar.set_status(**self.monitor.data)
 
         if is_new_gt:
             self.dataset.save_gts()
