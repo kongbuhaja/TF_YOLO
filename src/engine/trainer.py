@@ -71,7 +71,7 @@ class Trainer(Handler):
         val_metrics = {}
         lr = float(self.optimizer.lr)
 
-        if self.validator and epoch % self.cfg.period == 0:
+        if self.validator and (epoch + 1) % self.cfg.period == 0:
             val_losses, val_metrics = self.validator.validate()
 
             current_map = val_metrics.get("mAP", 0.0)
