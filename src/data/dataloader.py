@@ -36,7 +36,6 @@ class Dataloader():
         if self.split == "train":
             process = Process(cfg.augmentation) + process
         elif self.split == "eval":
-            self.batch_size = 1
             process = Process({"resize_padding_with_info": [cfg.input_shape, cfg.constant]})
         process += Process(cfg.process)
 
