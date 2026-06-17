@@ -1,13 +1,14 @@
 import time, sys
 
 class ProgressBar:
-    def __init__(self, iterable, task="", split="", headers=None, total=None, ncols=12, min_interval=0.5):
+    def __init__(self, iterable, task="", split="", headers=[], ncols=12, min_interval=0.5, min_bar_len=30):
         self.iterable = iterable
-        self.headers = headers if headers else ["Epoch", "GPU_Mem", "Cls_Loss", "Box_Loss", "Dfl_Loss"]
+        self.headers = headers 
         self.task = task.upper()
         self.split = split.upper()
         self.ncols = ncols
         self.min_interval = min_interval
+        self.min_bar_len = min_bar_len
         self.is_ipython = False
         try:
             from IPython import get_ipython
@@ -40,7 +41,7 @@ class ProgressBar:
 
     def __iter__(self):
         self._initiate()
-                
+        self.print([""])
         for item in self.iterable:
             yield item
             self.current += 1
@@ -48,8 +49,6 @@ class ProgressBar:
 
         if self.current == self.total:
             self._print_lines(force=True)
-
-        self.print([""])
 
     def set_status(self, **kwargs):
         for key, value in kwargs.items():
@@ -94,27 +93,29 @@ class ProgressBar:
         suffix = f"| {self.current}/{self.total} [{self._format_time(elapsed)}<{self._format_time(remaining)}, {rate_disp:.2f}it/s]"
         
         ncols = self._col_width()
+        label_w = max(len(self.split), len(self.task), len("Running"), len("Done"), 8)
         
-        width = len(self.headers) * ncols if self.headers else len(prefix) + len(suffix) + 5
+        width = label_w + 3 + len(self.headers) * ncols if self.headers else label_w + 3 + len(prefix) + len(suffix)
         bar_len = width - len(prefix) - len(suffix)
+        bar_len = max(bar_len, self.min_bar_len)
         if bar_len < 0: bar_len = 0
         
         fill = (bar_len * self.current // self.total) if self.total > 0 else 0
         bar_char = "█" * fill + "░" * (bar_len - fill)
         
-        line1 = f"{self.task:>{ncols-3}} | "
+        line1 = f"{self.task:>{label_w}} | "
         for h in self.headers:
             line1 += f"{h:<{ncols}}"
             
-        line2 = f"{self.split:>{ncols-3}} | "
+        line2 = f"{self.split:>{label_w}} | "
         for h in self.headers:
             val = self.values.get(h, "")
             line2 += f"{val:<{ncols}}"
             
         if self.current >= self.total:
-            line3 = f"{'Done':>{ncols-3}} | "
+            line3 = f"{'Done':>{label_w}} | "
         else:
-            line3 = f"{'Running':>{ncols-3}} | "
+            line3 = f"{'Running':>{label_w}} | "
         line3 += f"{prefix}{bar_char}{suffix}"
         
         lines = [line for line in [line1, line2, line3] if line.strip()]

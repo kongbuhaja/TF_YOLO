@@ -220,7 +220,7 @@ class Env():
         
         head = "📢 Hardware Setting Summary"
         length = 90
-        
+        print()
         print("="*length)
         print(" "*((length-len(head))//2) + head)
         print("="*length)
@@ -252,7 +252,7 @@ class Env():
         else:
             print("    (Running on CPU Mode)")
             
-        print("="*length + "\n")
+        print("="*length)
 
     def _elements_to_range(self, elements):
         if not elements: return "None"
