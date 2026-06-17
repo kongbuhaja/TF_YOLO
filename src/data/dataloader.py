@@ -9,8 +9,6 @@ import logging, traceback
 
 class Dataloader():
     def __init__(self, cfg, data):
-        # for name, value in cfg.items():
-        #     setattr(self, name, value)
         self.epoch = 0
         self.close_mosaic = cfg.epochs - cfg.close_mosaic + 1
         self.batch_size = cfg.batch_size
@@ -65,7 +63,7 @@ class Dataloader():
         else:
             start_idx = self.idx * self.batch_size
             end_idx = min((self.idx + 1) * self.batch_size, len(self.indices))
-            batch_indices = self.indices[start_idx:end_idx].tolist()
+            batch_indices = self.indices[start_idx:end_idx]
             batch_data = self._process_batch(batch_indices)
 
         if isinstance(batch_data, Exception):
@@ -82,7 +80,7 @@ class Dataloader():
             try:
                 start_idx = self.prefetch_idx * self.batch_size
                 end_idx = min((self.prefetch_idx + 1) * self.batch_size, len(self.indices))
-                batch_indices = self.indices[start_idx:end_idx].tolist()
+                batch_indices = self.indices[start_idx:end_idx]
                 batch_data = self._process_batch(batch_indices)
                 
                 while not self._stop_signal:
@@ -163,4 +161,3 @@ class Dataloader():
         if self._executor:
             self._executor.shutdown(wait=True)
             self._executor = None
-
