@@ -125,13 +125,14 @@ class Model(tf.keras.Model):
 
         head = "📢 Model Summary"
         length = sum(lengths) + len(step)*(len(lengths)-1)
+        print()
         print("="*length)
         print(" "*((length-len(head))//2) + head)
         print("="*length)
         
         for cols in zip(*sheet):
             print(step.join([f"{data:<{length}}" for data, length in zip(cols, lengths)]))
-        print("="*length, end="\n\n")
+        print("="*length)
 
 class Empty_model():
     def __call__(self, data):
