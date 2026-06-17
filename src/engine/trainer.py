@@ -17,7 +17,7 @@ class Trainer(Handler):
         self.optimizer = Optimizer(cfg, self.total_steps, self.steps_per_epoch)
         self.monitor.set_output_path(self.model.path)
 
-        self.validator = Validator(self.env, self.model, self.cfg, self.dataset) if self.cfg.period > 0 else None
+        self.validator = Validator(self.env, self.model, self.cfg, self.dataset)
         self.best_map = 0.0
         # chage the default value when load model
 
@@ -71,7 +71,7 @@ class Trainer(Handler):
         val_metrics = {}
         lr = float(self.optimizer.lr)
 
-        if self.validator and (epoch + 1) % self.cfg.period == 0:
+        if (epoch + 1) % self.cfg.period == 0 or (epoch + 1) == self.cfg.epochs:
             val_losses, val_metrics = self.validator.validate()
 
             current_map = val_metrics.get("mAP", 0.0)
