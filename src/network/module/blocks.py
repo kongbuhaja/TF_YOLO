@@ -12,6 +12,7 @@ class C2f(Layer):
     def call(self, x, training=False):
         x = tf.split(self.cv1(x, training), 2, axis=-1)
         x.extend(block(x[-1], training) for block in self.blocks)
+        x = [tf.cast(t, x[0].dtype) for t in x]
         return self.cv2(tf.concat(x, -1), training)
     
 class C3(Layer):
@@ -24,7 +25,9 @@ class C3(Layer):
         self.block = SequentialLayer([Bottleneck(ch, ch, shortcut, g, k=(1, 3), e=1.0) for _ in range(r)])
 
     def call(self, x, training=False):
-        return self.cv3(tf.concat([self.block(self.cv1(x, training), training), self.cv2(x, training)], -1))
+        a = self.block(self.cv1(x, training), training)
+        b = self.cv2(x, training)
+        return self.cv3(tf.concat([a, tf.cast(b, a.dtype)], -1))
 
 class C3k(C3):
     def __init__(self, in_ch, out_ch, r=1, shortcut=True, g=1, e=0.5, k=3):
@@ -49,7 +52,7 @@ class C2PSA(Layer):
     def call(self, x, training=False):
         a, b = tf.split(self.cv1(x, training), 2, axis=-1)
         b = self.blocks(b, training)
-        return self.cv2(tf.concat([a, b], -1), training)
+        return self.cv2(tf.concat([a, tf.cast(b, a.dtype)], -1), training)
 
 repeat_modules = {
     "c2f": C2f,

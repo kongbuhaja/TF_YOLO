@@ -13,8 +13,10 @@ class Optimizer():
                                              "warmup_epochs": 3,
                                              "warmup_bias_lr": 0.1})
         self.scheduler = Scheduler(sch_cfg, total_steps, steps_per_epoch)
-
         self.warmup_steps = self.scheduler.warmup_steps
+
+        amp = str(getattr(cfg, "amp", False))
+        self.use_loss_scaling = (amp == "fp16")
 
         for key, value in opt_cfg.items():
             if key != "name":
@@ -55,6 +57,18 @@ class Optimizer():
             args["weight_decay"] = self.weight_decay
             
         self.model = opt(**args)
+        if self.use_loss_scaling:
+            self.model = tf.keras.mixed_precision.LossScaleOptimizer(self.model)
+
+    def get_scaled_loss(self, loss):
+        if self.use_loss_scaling:
+            return self.model.get_scaled_loss(loss)
+        return loss
+
+    def get_unscaled_gradients(self, grads):
+        if self.use_loss_scaling:
+            return self.model.get_unscaled_gradients(grads)
+        return grads
 
     def update(self, step):
         step = tf.cast(step, tf.float32)
@@ -63,25 +77,27 @@ class Optimizer():
             progress = step / tf.maximum(self.warmup_steps, 1.0)
             beta = self.warmup_beta + (self.beta - self.warmup_beta) * progress
 
-            if hasattr(self.model, "momentum"):
-                if isinstance(self.model.momentum, tf.Variable):
-                    self.model.momentum.assign(beta)
-                else:
-                    self.model.momentum = beta
+            opt = getattr(self.model, "inner_optimizer", self.model)
 
-            elif hasattr(self.model, "beta_1"):
-                if isinstance(self.model.beta_1, tf.Variable):
-                    self.model.beta_1.assign(beta)
+            if hasattr(opt, "momentum"):
+                if isinstance(opt.momentum, tf.Variable):
+                    opt.momentum.assign(beta)
                 else:
-                    self.model.beta_1 = beta
+                    opt.momentum = beta
 
-            elif hasattr(self.model, "rho"):
-                if isinstance(self.model.rho, tf.Variable):
-                    self.model.rho.assign(beta)
+            elif hasattr(opt, "beta_1"):
+                if isinstance(opt.beta_1, tf.Variable):
+                    opt.beta_1.assign(beta)
                 else:
-                    self.model.rho = beta
+                    opt.beta_1 = beta
+
+            elif hasattr(opt, "rho"):
+                if isinstance(opt.rho, tf.Variable):
+                    opt.rho.assign(beta)
+                else:
+                    opt.rho = beta
 
     @property
     def lr(self):
-        # return self.model.learning_rate(self.model.iterations)
-        return self.model.learning_rate
+        opt = getattr(self.model, "inner_optimizer", self.model)
+        return opt.learning_rate

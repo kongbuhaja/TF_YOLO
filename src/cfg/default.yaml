@@ -2,20 +2,21 @@ task: &task bbox # bbox, segment
 
 model: yolo11n.yaml
 data: coco
-epochs: 100
+epochs: 2
 close_mosaic: 1
 workers: 8
-batch_size: &batch_size 32
+batch_size: &batch_size 64
 cache: &cache False # need least 100G memory
 prefetch_size: 8
 shuffle: True
 input_shape: &input_shape [640, 640, 3]
-conf_th: 0.25 # predict:0.25, validation: 0.001
+conf_th: 0.001 # predict:0.25, validation: 0.001
 iou_th: 0.7
 constant: &constant 0 # (0-255) it can be list
 max_det: &max_det 300
-period: 1 # save, valid model period
+period: 2 # save, valid model period
 resume: False # start new train with loaded weight or continue training
+amp: bf16 # fp16, bf16, False
 
 optimizer: 
   name: SGD # SGD, Adam, AdamW, AdamW, Adamax, NAdam, RMSProp

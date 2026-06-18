@@ -7,8 +7,8 @@ def make_anchors(feats, strides, grid_cell_offset=0.5):
     for feat, stride in zip(feats, strides):
         shape = tf.shape(feat)
         h, w = shape[1], shape[2]
-        yv, xv = tf.meshgrid(tf.range(h, dtype=dtype), tf.range(w, dtype=dtype), indexing='ij')
-        grid = tf.reshape(tf.stack((xv, yv), axis=-1), [-1, 2]) + grid_cell_offset
+        yv, xv = tf.meshgrid(tf.range(h), tf.range(w), indexing='ij')
+        grid = tf.cast(tf.reshape(tf.stack((xv, yv), axis=-1), [-1, 2]), dtype) + grid_cell_offset
         anchor_points.append(grid)
         stride_tensor.append(tf.ones([h*w, 1], dtype=dtype) * stride)
     return tf.concat(anchor_points, 0), tf.concat(stride_tensor, 0)
@@ -90,7 +90,7 @@ def NMS(batch_preds,
 
         boxes = tf.boolean_mask(preds[:, :bi], mask)
         confs = tf.boolean_mask(confs, mask)[:, None]
-        cls_ids = tf.cast(tf.boolean_mask(cls_ids, mask), tf.float32)[:, None]
+        cls_ids = tf.cast(tf.boolean_mask(cls_ids, mask), boxes.dtype)[:, None]
         bgs = tf.boolean_mask(preds[:, mi:], mask)
 
         preds = tf.concat([boxes, confs, cls_ids, bgs], axis=-1)
@@ -114,8 +114,8 @@ def NMS(batch_preds,
         
         scores = preds[:, bi]
 
-        nms_indices = nms_func(boxes,
-                               scores,
+        nms_indices = nms_func(tf.cast(boxes, tf.float32),
+                               tf.cast(scores, tf.float32),
                                max_output_size=max_det,
                                iou_threshold=iou_th)
         

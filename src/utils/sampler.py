@@ -15,6 +15,7 @@ class Sampler():
         b, max_det = gt_shape[0], gt_shape[1]
 
         gt_labels = tf.cast(gt_labels, tf.int32)
+        dtype = pred_scores.dtype
 
         mask_pos, metrics, overlaps = self.get_positive_sample(pred_scores,
                                                                pred_bboxes,
@@ -23,7 +24,7 @@ class Sampler():
                                                                gt_bboxes, 
                                                                mask_gt)
         target_gt_indices, fg_mask, mask_pos = self.get_highest_overlaps(mask_pos, overlaps, max_det)
-        target_labels, target_bboxes, target_scores = self.get_targets(gt_labels, gt_bboxes, target_gt_indices, fg_mask)
+        target_labels, target_bboxes, target_scores = self.get_targets(gt_labels, gt_bboxes, target_gt_indices, fg_mask, dtype)
 
         metrics *= mask_pos
         pos_metrics = tf.reduce_max(metrics, -1, keepdims=True)
@@ -57,7 +58,7 @@ class Sampler():
         
         return target_gt_indices, fg_mask, mask_pos
     
-    def get_targets(self, gt_labels, gt_bboxes, target_gt_indices, fg_mask):
+    def get_targets(self, gt_labels, gt_bboxes, target_gt_indices, fg_mask, dtype=tf.float32):
         gt_shape = tf.shape(gt_labels)
         b, max_det = gt_shape[0], gt_shape[1]
         batch_ind = tf.range(b, dtype=tf.int32)[:, None]
@@ -70,17 +71,17 @@ class Sampler():
         target_bboxes = tf.gather(gt_bboxes_flat, target_gt_indices_flat)
 
         target_labels_clamped = tf.maximum(target_labels, 0)
-        target_scores = tf.one_hot(tf.cast(target_labels_clamped, tf.int32), depth=self.nc, dtype=tf.float32)
+        target_scores = tf.one_hot(tf.cast(target_labels_clamped, tf.int32), depth=self.nc, dtype=dtype)
 
         fg_scores_mask = tf.tile(fg_mask[:, :, None], [1, 1, self.nc])
-        target_scores = tf.where(fg_scores_mask, target_scores, 0.0)
+        target_scores = tf.where(fg_scores_mask, target_scores, tf.cast(0.0, dtype))
 
         return target_labels, target_bboxes, target_scores
 
     def get_mask_with_anchors(self, anc_points, gt_bboxes):
         lt, rb = tf.split(gt_bboxes[:, :, None], 2, -1)
         deltas = tf.concat([anc_points[None, None] - lt, rb - anc_points[None, None]], -1)
-        return tf.cast(tf.reduce_min(deltas, -1) > self.eps, tf.float32)
+        return tf.cast(tf.reduce_min(deltas, -1) > self.eps, anc_points.dtype)
     
     def get_metrics(self, pred_scores, pred_bboxes, gt_labels, gt_bboxes, mask_gt):
         pred_scores_T = tf.transpose(pred_scores, [0, 2, 1])
@@ -104,9 +105,9 @@ class Sampler():
         topk_values, topk_indices = tf.math.top_k(metric_flat, k=self.topk, sorted=True)
 
         if topk_mask is None:
-            topk_mask = tf.cast(topk_values > self.eps, tf.float32)
+            topk_mask = tf.cast(topk_values > self.eps, metrics.dtype)
         else:
-            topk_mask = tf.cast(topk_mask, tf.float32)
+            topk_mask = tf.cast(topk_mask, metrics.dtype)
             topk_mask = tf.reshape(topk_mask, [-1, 1])
             topk_mask = tf.broadcast_to(topk_mask, [b * max_det, self.topk])
 

@@ -55,14 +55,13 @@ class DFL(Layer):
         # param 측정 때문에
         self.project = tf.Variable(tf.reshape(tf.range(reg_max, dtype=tf.float32), [reg_max, 1]), trainable=False)
 
-
     def call(self, x, training=False):
         shape = tf.shape(x)
         b, a = shape[0], shape[1]
         
         x = tf.reshape(x, [-1, 4, self.reg_max])
         x = tf.nn.softmax(x, axis=-1)
-        x = tf.matmul(x, self.project)
+        x = tf.matmul(x, tf.cast(self.project, x.dtype))
         x = tf.reshape(x, [b, a, 4])
         return x
 
@@ -134,10 +133,10 @@ class Bottleneck(Layer):
         self.a = (ch, in_ch, out_ch)
 
     def call(self, x, training=False):
+        y = self.cv2(self.cv1(x, training), training)
         if self.add:
-            return x + self.cv2(self.cv1(x, training), training)
-        else:
-            return self.cv2(self.cv1(x, training), training)
+            return tf.cast(x, y.dtype) + y
+        return y
 
 class SPPF(Layer):
     def __init__(self, in_ch, out_ch, k=5):

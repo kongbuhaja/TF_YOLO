@@ -20,8 +20,18 @@ class Engine():
     def __init__(self, **kwargs):
         self.cfg = Config(**kwargs)
         self.env = Env(self.cfg.environment)
+        self._set_amp_policy()
         self.model = Model(self.cfg.model)
         self.dataset = Dataset(self.cfg.data)
+
+    def _set_amp_policy(self):
+        amp = str(getattr(self.cfg, "amp", False))
+        dtype_map = {"fp16": "float16", "bf16": "bfloat16"}
+        if amp in dtype_map:
+            try:
+                tf.keras.mixed_precision.set_global_policy(f"mixed_{dtype_map[amp]}")
+            except RuntimeError:
+                pass
 
     def train(self):
         if not hasattr(self, "trainer"):

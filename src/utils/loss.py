@@ -20,7 +20,9 @@ class DFLDetectionLoss():
 
         self.hyp = hyp
 
-    def __call__(self, preds, gts):   
+    def __call__(self, preds, gts):
+        preds = [tf.cast(p, tf.float32) for p in preds]
+        gts = tf.cast(gts, tf.float32)
         anchors, strides = make_anchors(preds, self.stride)
         pred_shape = tf.shape(preds[0])
         img_size = tf.cast(pred_shape, tf.float32)[1:3] * self.stride[0]
@@ -35,11 +37,11 @@ class DFLDetectionLoss():
         mask_gt = tf.cast(tf.reduce_sum(gt_bboxes, axis=-1, keepdims=True) > 0, tf.float32)
     
         _, target_bboxes, target_scores, fg_mask, _ = self.sampler.sampling(tf.sigmoid(tf.stop_gradient(pred_scores)), 
-                                                                             tf.stop_gradient(pred_bboxes) * strides, 
-                                                                             anchors * strides, 
-                                                                             gt_labels, 
-                                                                             gt_bboxes, 
-                                                                             mask_gt)
+                                                                            tf.stop_gradient(pred_bboxes) * strides, 
+                                                                            anchors * strides, 
+                                                                            gt_labels, 
+                                                                            gt_bboxes, 
+                                                                            mask_gt)
         
         norm = tf.maximum(tf.reduce_sum(target_scores), 1)
         weight = tf.reduce_sum(target_scores, -1)
@@ -104,7 +106,7 @@ class DFLDetectionLoss():
             b, anc_n, c = dist_shape[0], dist_shape[1], dist_shape[2]
             pred_dist = tf.reshape(pred_dist, [b, anc_n, 4, c//4])
             pred_dist = tf.nn.softmax(pred_dist, -1)
-            pred_dist = tf.matmul(pred_dist, self.project)
+            pred_dist = tf.matmul(pred_dist, tf.cast(self.project, pred_dist.dtype))
             pred_dist = tf.reshape(pred_dist, [b, anc_n, 4])
         return dist2bbox(pred_dist, anchors, xywh=False)
 
