@@ -33,7 +33,8 @@ RUN echo "== Set default python == " && \
 
 RUN echo "== Install Dev Tools ==" &&\
     uv pip install --system \
-    tensorflow==2.15 \
+    tensorflow==2.18.1 \
+    tf_keras \
     opencv-python \
     matplotlib \
     pillow \
@@ -45,4 +46,10 @@ RUN echo "== Install Dev Tools ==" &&\
     scipy \
     pycocotools \
     psutil \
-    pynvml
+    nvidia-ml-py \
+    onnx \
+    tf2onnx \
+    openvino \
+    tensorrt-cu12
+
+ENV TF_USE_LEGACY_KERAS=1
