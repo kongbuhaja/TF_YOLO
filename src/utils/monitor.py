@@ -1,4 +1,4 @@
-import os, csv
+import os
 import tensorflow as tf
 import numpy as np
 
@@ -24,6 +24,12 @@ class Monitor():
         self.csv_path = path / "results.csv"
         self.tb_path = path / "tensorboard"
         self.writer = tf.summary.create_file_writer(str(self.tb_path))
+        self._csv_keys = None
+        if self.csv_path.exists():
+            with open(self.csv_path) as f:
+                header = f.readline()
+            if header.strip():
+                self._csv_keys = header.split()
 
     def update(self, **data):
         for key, value in data.items():
@@ -60,7 +66,10 @@ class Monitor():
                     "metrics/mAP50": metrics.get("mAP50", ""),
                     "metrics/mAP": metrics.get("mAP", "")})
         row.update(self._prefix("train", train_losses))
-        row.update(self._prefix("val", val_losses))
+        if val_losses:
+            row.update(self._prefix("val", val_losses))
+        else:
+            row.update({f"val/{k}": "" for k in train_losses})
         row["lr"] = lr
 
         for k, v in row.items():
@@ -68,36 +77,24 @@ class Monitor():
                 row[k] = round(v, 6) if isinstance(v, float) else v
 
         self.rows.append(row)
-        self._write_csv()
+        self._append_csv(row)
         self._write_tb(epoch, train_losses, val_losses, metrics, lr)
 
     def _prefix(self, prefix, losses):
         return {f"{prefix}/{k}": v for k, v in losses.items()}
 
-    def _all_keys(self):
-        keys = ["Epoch"]
-        for row in self.rows:
-            for k in row:
-                if k not in keys:
-                    keys.append(k)
-        if "lr" not in keys:
-            keys.append("lr")
-        return keys
+    def _append_csv(self, row):
+        if self._csv_keys is None:
+            self._csv_keys = list(row.keys())
+            widths = {k: max(len(k), 12) for k in self._csv_keys}
+            with open(self.csv_path, "w") as f:
+                f.write("".join(f"{k:<{widths[k] + 2}}" for k in self._csv_keys).rstrip() + "\n")
+        else:
+            widths = {k: max(len(k), 12) for k in self._csv_keys}
 
-    def _write_csv(self):
-        keys = self._all_keys()
-        widths = {k: max(len(k), 8) for k in keys}
-        for row in self.rows:
-            for k, v in row.items():
-                widths[k] = max(widths[k], len(str(v)))
-
-        with open(self.csv_path, "w", newline="") as f:
-            header = "".join(f"{k:<{widths[k] + 2}}" for k in keys if k in keys)
-            f.write(header.rstrip() + "\n")
-
-            for row in self.rows:
-                line = "".join(f"{str(row.get(k, '')):<{widths[k] + 2}}" for k in keys)
-                f.write(line.rstrip() + "\n")
+        line = "".join(f"{str(row.get(k, '')):<{widths[k] + 2}}" for k in self._csv_keys)
+        with open(self.csv_path, "a") as f:
+            f.write(line.rstrip() + "\n")
 
     def _write_tb(self, epoch, train_losses, val_losses, metrics, lr):
         if not hasattr(self, "writer"):
