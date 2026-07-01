@@ -11,6 +11,7 @@ class Model(tf.keras.Model):
         self.model_name = cfg.name + cfg.scale
         self.weight = cfg.weight
         self.modules, self.info = parse_model(cfg)
+        self.normalize = getattr(cfg, "normalize", True)
         for i, m in enumerate(self.modules):
             setattr(self, f"_m{i}", m)
 
@@ -29,7 +30,9 @@ class Model(tf.keras.Model):
             self.built = True
 
     def call(self, x, normalize=True, training=False):
-        x = self.normalize(x) if normalize else x
+        x = tf.cast(x, tf.float32)
+        if normalize:
+            x = x / 255.
         y = []
         for module in self.modules:
             if module.f != -1:
@@ -69,17 +72,15 @@ class Model(tf.keras.Model):
     def load_model_path(self, path):
         if path is None:
             return
-        elif not path.exists():
-            print(f"Checkpoint not found: {path}, so weights are initiated")
+        if not path.exists():
+            print(f"Checkpoint not found: {path}, starting with fresh weights")
+            return
         var_path = path / "variables" / "variables"
         self.load_weights(str(var_path))
         print(f"Loaded weights from {path}")
 
     def get_config(self):
         return {}
-    
-    def normalize(self, x):
-        return tf.cast(x, tf.float32) / 255.0
     
     def initialize_bias(self):
         for module in self.modules:
