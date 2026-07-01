@@ -7,18 +7,24 @@ from src.models import Model
 from src.engine.validator import Validator
 from src.engine.evaluator import Evaluator
 from src.engine.trainer import Trainer
+from src.engine.benchmarker import Benchmarker
+from src.engine.exporter import Exporter
 
 __all__ = (
     "Engine",
     "Trainer",
     "Validator",
     "Evaluator",
+    "Exporter",
+    "Benchmarker",
 )
 
 
 class Engine():
     def __init__(self, **kwargs):
         self.cfg = Config(**kwargs)
+        if "epochs" not in kwargs:
+            self.cfg._default_epochs = True
         self.env = Env(self.cfg.environment)
         self._set_amp_policy()
         self.model = Model(self.cfg.model)
@@ -52,6 +58,33 @@ class Engine():
             raise ValueError(f"{role} is not supported")
 
         return handler_map[role](self.env, self.model, self.cfg, self.dataset)
+
+    def export(self, weights=None, format="tensorrt", dtype="fp16"):
+        if weights is None:
+            weights = self.model.weights_path / "best"
+        if not hasattr(self, "exporter") or self.exporter.weights != weights:
+            self.exporter = Exporter(self.model, weights,
+                                     [1] + self.cfg.input_shape,
+                                     self.model.normalize)
+        return self.exporter.export(format, dtype=dtype)
+
+    def benchmark(self, weights=None, format="tensorrt", dtype="fp16", gpu=0):
+        if weights is None:
+            weights = self.model.weights_path / "best"
+        if not hasattr(self, "exporter") or self.exporter.weights != weights:
+            self.exporter = Exporter(self.model, weights,
+                                     [1] + self.cfg.input_shape, self.model.normalize)
+
+        if self.exporter.is_exported(format, dtype):
+            artifact_path = self.exporter.artifact_path(format, dtype)
+            print(f"[Benchmark] Using existing export: {artifact_path}")
+        else:
+            print(f"[Benchmark] Exporting {format}/{dtype} ...")
+            artifact_path = self.exporter.export(format, dtype=dtype)
+
+        if not hasattr(self, "benchmarker"):
+            self.benchmarker = Benchmarker(self.env, self.model, self.cfg, self.dataset)
+        return self.benchmarker.benchmark(artifact_path, format, dtype, gpu)
 
     def on_epoch_start(self):
         self.dataloader.on_epoch_start()

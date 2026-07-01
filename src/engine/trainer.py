@@ -5,6 +5,7 @@ from src.utils.optimizer import Optimizer
 from pathlib import Path
 import numpy as np
 import yaml
+import re
 import tensorflow as tf
 
 class Trainer(Handler):
@@ -13,19 +14,30 @@ class Trainer(Handler):
         self.loss = DFLDetectionLoss(model, cfg.loss)
         self.steps_per_epoch = len(self.dataloader)
         self.global_step = 0
+        self.start_epoch = 0
+        self.resume = getattr(cfg, "resume", False)
+
+        if self.resume:
+            self._apply_resume_epochs()
+
         self.total_steps = self.cfg.epochs * self.steps_per_epoch
         self.optimizer = Optimizer(cfg, self.total_steps, self.steps_per_epoch)
         self.monitor.set_output_path(self.model.path)
 
         self.validator = Validator(self.env, self.model, self.cfg, self.dataset)
         self.best_map = 0.0
-        # chage the default value when load model
 
-    def train(self, resume=False):
-        if resume:
-            pass
+        if self.resume:
+            self._load_resume_state()
+
+    def train(self):
+        if self.start_epoch >= self.cfg.epochs:
+            print(f"Already complete: epoch {self.start_epoch} >= "
+                  f"epochs {self.cfg.epochs}. Increase `epochs` to extend training.")
+            return 0.0, {}
+
         try:
-            for epoch in range(self.cfg.epochs):
+            for epoch in range(self.start_epoch, self.cfg.epochs):
                 self._on_epoch_start()
 
                 for data in self.pbar:
@@ -77,10 +89,11 @@ class Trainer(Handler):
             val_losses, val_metrics = self.validator.validate()
 
             current_map = val_metrics.get("mAP", 0.0)
-            if self._save_checkpoint(epoch, self.best_map, current_map):
-                self.best_map = current_map
+            self._save_checkpoint(epoch + 1, self.best_map, current_map)
 
-        self.monitor.log_epoch(epoch, train_losses, val_losses, val_metrics, lr)
+        self.monitor.log_epoch(epoch + 1, train_losses, val_losses, val_metrics, lr)
+        self.model.save_model("last")
+        self._save_optimizer_state("last")
 
     def _on_iteration_start(self):
         self.optimizer.update(self.global_step)
@@ -116,13 +129,88 @@ class Trainer(Handler):
         self.global_step += 1
 
     def _save_checkpoint(self, epoch, best_map, current_map):
-        self.model.save_model(epoch)
-        # self.save_model("last")
+        name = f"epoch{epoch}"
+        self.model.save_model(name)
+        self._save_optimizer_state(name)
         if current_map > best_map:
             self.model.save_model("best")
-            return True
-        return False
-    
+            self._save_optimizer_state("best")
+            self.best_map = current_map
+
+    def _apply_resume_epochs(self):
+        args_path = self.model.path / "args.yaml"
+        if not args_path.exists():
+            print(f"{args_path} does not exist.")
+            return
+        with open(args_path) as f:
+            args = yaml.safe_load(f)
+        self.cfg.epochs = args["epochs"]
+
+    def _load_resume_state(self):
+        saved_path = getattr(self.cfg.model, "saved_path", None)
+        if saved_path is not None:
+            saved_path = Path(saved_path)
+
+        restored = self._load_optimizer_state(saved_path)
+
+        if restored:
+            self.start_epoch = self.global_step // self.steps_per_epoch
+        elif saved_path is not None:
+            self.start_epoch = self._parse_epoch(saved_path)
+            self.global_step = self.start_epoch * self.steps_per_epoch
+            opt = getattr(self.optimizer.model, "inner_optimizer", self.optimizer.model)
+            opt.iterations.assign(self.global_step)
+
+        if self.start_epoch == 0:
+            print(f"New train: no previous epoch found, "
+                  f"starting from epoch 0/{self.cfg.epochs}")
+        else:
+            print(f"Resume: epoch {self.start_epoch}/{self.cfg.epochs}, "
+                  f"global_step={self.global_step}, "
+                  f"optimizer={'restored' if restored else 'fresh'}")
+
+    def _load_optimizer_state(self, saved_path):
+        if saved_path is None:
+            return False
+        opt_dir = saved_path / "optimizer"
+        if not opt_dir.exists():
+            return False
+
+        opt = getattr(self.optimizer.model, "inner_optimizer", self.optimizer.model)
+        try:
+            opt.build(self.model.trainable_variables)
+        except (AttributeError, NotImplementedError, TypeError):
+            pass
+
+        ckpt = tf.train.Checkpoint(optimizer=self.optimizer.model)
+        mgr = tf.train.CheckpointManager(ckpt, str(opt_dir), max_to_keep=1)
+        if mgr.latest_checkpoint is None:
+            return False
+
+        ckpt.restore(mgr.latest_checkpoint).expect_partial()
+        self.global_step = int(opt.iterations.numpy())
+        return True
+
+    def _save_optimizer_state(self, name):
+        opt_dir = self.model.weights_path / name / "optimizer"
+        opt_dir.mkdir(parents=True, exist_ok=True)
+        ckpt = tf.train.Checkpoint(optimizer=self.optimizer.model)
+        mgr = tf.train.CheckpointManager(ckpt, str(opt_dir), max_to_keep=1)
+        mgr.save()
+
+    def _parse_epoch(self, saved_path):
+        name = saved_path.name
+        m = re.match(r"epoch(\d+)$", name)
+        if m:
+            return int(m.group(1))
+        best_n = -1
+        if saved_path.parent.exists():
+            for d in saved_path.parent.iterdir():
+                mm = re.match(r"epoch(\d+)$", d.name)
+                if mm:
+                    best_n = max(best_n, int(mm.group(1)))
+        return max(best_n, 0)
+
     def save_args(self):
         def serialize(value, order=None, skip_keys=None):
             if isinstance(value, Path):
@@ -144,7 +232,7 @@ class Trainer(Handler):
             except:
                 return str(value)
         args = {}
-        skip_keys = {"path", "weights", "environment"}
+        skip_keys = {"path", "weights", "environment", "resume", "_default_epochs"}
         for key, value in self.cfg.items():
             if key in skip_keys:
                 continue
