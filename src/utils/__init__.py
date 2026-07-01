@@ -3,8 +3,11 @@ import tensorflow as tf
 import psutil, pynvml
 
 class Env():
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
     def __init__(self, cfg):
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        
 
         self.info = {
             "cpu": {},
@@ -189,7 +192,7 @@ class Env():
             self.info["gpus"]["data"][i]["temp"] = temp
         
         self.info["gpus"]["used_mem"] = used_mem
-        self.info["gpus"]["temp"] = sum(temps)/len(temps)
+        self.info["gpus"]["temp"] = sum(temps)/len(temps) if temps else 0
 
     def _get_gpus_data(self):      
         data = {}
