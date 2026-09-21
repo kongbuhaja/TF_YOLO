@@ -60,7 +60,7 @@ class Dataset():
         self.util.save_data(self.dirs["eval"], gts)
 
     def eval_metric(self, pred_json_path):
-        self.util.eval_metric(self.dirs["eval"], pred_json_path)
+        return self.util.eval_metric(self.dirs["eval"], pred_json_path)
 
     def read_data(self, split, cache, workers):
         self.cache = cache

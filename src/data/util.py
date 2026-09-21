@@ -170,4 +170,6 @@ def coco_eval(gt_json_path, dt_json_path, ann_type="bbox"):
         f.write(result)
     print(result)
 
-utils = {"coco": COCO}
+    return coco_eval.stats
+
+utils = {"coco": COCO, "coco_mini": COCO}
