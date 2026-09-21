@@ -1,8 +1,8 @@
 task: &task bbox # bbox, segment
 
 model: yolo11n.yaml
-data: coco
-epochs: 2
+data: coco_mini
+epochs: 30
 close_mosaic: 1
 workers: 8
 batch_size: &batch_size 64
@@ -13,10 +13,12 @@ input_shape: &input_shape [640, 640, 3]
 conf_th: 0.001 # predict:0.25, validation: 0.001
 iou_th: 0.7
 constant: &constant 0 # (0-255) it can be list
+resume: False
+normalize: True
 max_det: &max_det 300
-period: 2 # save, valid model period
-resume: False # start new train with loaded weight or continue training
-amp: bf16 # fp16, bf16, False
+period: 1 # save, valid model period
+amp: fp16 # fp16, bf16, False
+export: 
 
 optimizer: 
   name: SGD # SGD, Adam, AdamW, AdamW, Adamax, NAdam, RMSProp
@@ -56,4 +58,3 @@ process:
 
 postprocess:
   batch: [*task, *max_det]
-  # normalize: [True] -> model로 이동하자 cpu보다 gpu가 빠름

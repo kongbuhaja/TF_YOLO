@@ -106,6 +106,11 @@ def _get_model_file(file_name):
     if _is_saved_model_dir(file_path):
         return _resolve_saved_model(file_path)
 
+    if file_path.is_dir():
+        for name in ("model.engine", "model.tflite", "model.xml", "model.onnx"):
+            if (file_path / name).exists():
+                return file_path, None, True, None
+
     if ext != ".yaml" and ext != "":
         return file_path, None, True, file_path.parent
 
