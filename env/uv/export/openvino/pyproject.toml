@@ -1,0 +1,16 @@
+[project]
+name = "tf-yolo-export-openvino"
+version = "0.1.0"
+description = "TF_YOLO export inference environment (openvino)"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "numpy==1.26.4",
+    "opencv-python==4.11.0.86",
+    "pyyaml==6.0.3",
+    "tqdm==4.67.3",
+    "pycocotools==2.0.11",
+    "requests==2.34.2",
+    "psutil==7.2.2",
+    "nvidia-ml-py==13.610.43",
+    "openvino==2026.3.0",
+]

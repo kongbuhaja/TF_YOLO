@@ -1,0 +1,107 @@
+name: tf_yolo
+
+x-gpu: &gpu
+  deploy:
+    resources:
+      reservations:
+        devices:
+          - driver: nvidia
+            device_ids: ["0"]
+            capabilities: [gpu]
+
+x-common: &common
+  stdin_open: true
+  tty: true
+  privileged: true
+  volumes:
+    - ../../..:/home/ML
+    - /dev/bus/usb:/dev/bus/usb
+  working_dir: /home/ML/${REPO_DIR:-TF_YOLO}
+
+services:
+  dev:
+    profiles: ["dev"]
+    build:
+      context: ../..
+      dockerfile: env/docker/dev.dockerfile
+    image: tf_yolo:latest
+    container_name: tf_yolo
+    <<: [*common, *gpu]
+    mem_limit: 64g
+    shm_size: 8gb
+    environment:
+      HOST_PERMS: "${HOST_PERMS:-1000:1000}"
+    command: ["bash"]
+
+  export-tflite:
+    profiles: ["pc"]
+    build:
+      context: ../..
+      dockerfile: env/docker/export_tflite.dockerfile
+    image: tf_yolo_export_tflite:latest
+    <<: [*common, *gpu]
+    command: ["bash"]
+
+  export-onnx:
+    profiles: ["pc"]
+    build:
+      context: ../..
+      dockerfile: env/docker/export_onnx.dockerfile
+    image: tf_yolo_export_onnx:latest
+    <<: [*common, *gpu]
+    command: ["bash"]
+
+  export-openvino:
+    profiles: ["pc"]
+    build:
+      context: ../..
+      dockerfile: env/docker/export_openvino.dockerfile
+    image: tf_yolo_export_openvino:latest
+    <<: [*common, *gpu]
+    command: ["bash"]
+
+  export-tensorrt:
+    profiles: ["pc"]
+    build:
+      context: ../..
+      dockerfile: env/docker/export_tensorrt.dockerfile
+    image: tf_yolo_export_tensorrt:latest
+    <<: [*common, *gpu]
+    command: ["bash"]
+
+  edge-rpi-cpu:
+    profiles: ["infer", "edge"]
+    build:
+      context: ../..
+      dockerfile: env/docker/edge_rpi_cpu.dockerfile
+    image: tf_yolo_edge_rpi_cpu:latest
+    <<: *common
+    command: ["bash"]
+
+  edge-rpi-coral:
+    profiles: ["infer", "edge"]
+    build:
+      context: ../..
+      dockerfile: env/docker/edge_rpi_coral.dockerfile
+    image: tf_yolo_edge_rpi_coral:latest
+    <<: *common
+    command: ["bash"]
+
+  edge-rpi-ncs2:
+    profiles: ["infer", "edge"]
+    build:
+      context: ../..
+      dockerfile: env/docker/edge_rpi_ncs2.dockerfile
+    image: tf_yolo_edge_rpi_ncs2:latest
+    <<: *common
+    command: ["bash"]
+
+  edge-jetson:
+    profiles: ["infer", "edge"]
+    build:
+      context: ../..
+      dockerfile: env/docker/edge_jetson.dockerfile
+    image: tf_yolo_edge_jetson:latest
+    <<: *common
+    runtime: nvidia
+    command: ["bash"]

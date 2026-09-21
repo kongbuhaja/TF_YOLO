@@ -1,0 +1,19 @@
+[project]
+name = "tf-yolo-export-openvino-legacy"
+version = "0.1.0"
+description = "TF_YOLO export inference environment for Intel NCS2 (OpenVINO 2022.3 LTS, MYRIAD)"
+requires-python = ">=3.9,<3.11"
+dependencies = [
+    "numpy==1.24.4",
+    "opencv-python==4.11.0.86",
+    "pyyaml==6.0.3",
+    "tqdm==4.67.3",
+    "pycocotools==2.0.11",
+    "requests==2.31.0",
+    "psutil==7.2.2",
+    "nvidia-ml-py==13.610.43",
+    "openvino==2022.3.2; platform_machine == 'x86_64'",
+]
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
