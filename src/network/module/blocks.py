@@ -27,7 +27,7 @@ class C3(Layer):
     def call(self, x, training=False):
         a = self.block(self.cv1(x, training), training)
         b = self.cv2(x, training)
-        return self.cv3(tf.concat([a, tf.cast(b, a.dtype)], -1))
+        return self.cv3(tf.concat([a, tf.cast(b, a.dtype)], -1), training)
 
 class C3k(C3):
     def __init__(self, in_ch, out_ch, r=1, shortcut=True, g=1, e=0.5, k=3):
