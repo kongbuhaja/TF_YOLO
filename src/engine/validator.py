@@ -69,7 +69,7 @@ class Validator(Handler):
         whwh = np.tile(self.cfg.input_shape[:2], 2)
 
         for b, pred in enumerate(nms_preds):
-            labels, pred = batch_labels[b], pred.numpy()
+            labels, pred = batch_labels[b], np.asarray(pred)
             labels = labels[np.sum(labels[..., 1:5], -1) > 0]
 
             t_cls, t_boxes = labels[:, 0].astype(int), xywh2xyxy(labels[:, 1:]) * whwh

@@ -12,11 +12,7 @@ class Handler():
         self.split = split
         self.monitor = Monitor(split)
 
-        # this is for test.
-        if split == "val" or split == "train":
-            data = self.dataset.load("val", cfg.cache, cfg.workers)
-        else:
-            data = self.dataset.load(split, cfg.cache, cfg.workers)
+        data = self.dataset.load(split, cfg.cache, cfg.workers)
 
         self.dataloader = Dataloader(cfg, data)
         self.category_map = data["category_map"]

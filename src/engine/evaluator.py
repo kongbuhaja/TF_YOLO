@@ -1,20 +1,61 @@
 from src.engine.handler import Handler
 from src.utils.util import NMS
+import json
 import numpy as np
+import tensorflow as tf
 
 
 class Evaluator(Handler):
     def __init__(self, env, model, cfg, dataset):
         super().__init__(env, model, cfg, dataset, "eval")
+        self.eval_model = None
 
     def evaluate(self):
         self._is_exist_dir()
-        pred_json_path = self.eval_path / f"predictions.json"
+        pred_json_path = self.eval_path / "predictions.json"
+        meta_path = self.eval_path / "predictions.meta"
 
-        if not pred_json_path.exists():
+        if not pred_json_path.exists() or not self._is_reusable(pred_json_path, meta_path):
+            self._build_eval_model()
             self._evaluate_step(pred_json_path)
+            self._save_meta(meta_path)
 
         self._compute_metrics(pred_json_path)
+
+    def _is_reusable(self, pred_json_path, meta_path):
+        if not meta_path.exists():
+            return False
+        with open(meta_path) as f:
+            meta = json.load(f)
+        if meta.get("dataset") != self.dataset.name:
+            return False
+        if meta.get("batches") != len(self.dataloader):
+            return False
+        weights = getattr(self.model, "weights_path", None)
+        checkpoint = weights / "best" if weights is not None else None
+        if checkpoint is None or not checkpoint.exists():
+            return False
+        return checkpoint.stat().st_mtime <= pred_json_path.stat().st_mtime
+
+    def _save_meta(self, meta_path):
+        weights = getattr(self.model, "weights_path", None)
+        meta = {"dataset": self.dataset.name,
+                "batches": len(self.dataloader),
+                "weights": str(weights / "best") if weights is not None else None}
+        with open(meta_path, "w") as f:
+            json.dump(meta, f, indent=2)
+
+    def _build_eval_model(self):
+        weights = self.model.weights_path / "best"
+        if not weights.exists():
+            print(f"[Evaluate] best weights not found at {weights}, using engine model as-is")
+            self.eval_model = self.model
+            return
+        tf.keras.mixed_precision.set_global_policy("float32")
+        from src.cfg import Config
+        from src.models.model import Model
+        cfg = Config(model=weights, input_shape=list(self.cfg.input_shape))
+        self.eval_model = Model(cfg.model)
 
     def _evaluate_step(self, pred_json_path):
         preds_json_list = []
@@ -26,16 +67,16 @@ class Evaluator(Handler):
         for i, data in enumerate(self.pbar):
             batch_image = data["image"]
 
-            preds, _ = self.model(batch_image.astype(np.float32), training=False)
+            preds, _ = self.eval_model(batch_image.astype(np.float32), training=False)
 
             nms_preds = NMS(preds,
                             conf_th=self.cfg.conf_th,
                             iou_th=self.cfg.iou_th,
                             max_det=self.cfg.max_det,
-                            nc=self.model.nc)
+                            nc=self.eval_model.nc)
 
             for b, (image_id, image, pred, info) in enumerate(zip(data["image_id"], data["image"], nms_preds, data["info"])):
-                pred = pred.numpy()
+                pred = np.asarray(pred)
                 if len(pred) == 0:
                     continue
 

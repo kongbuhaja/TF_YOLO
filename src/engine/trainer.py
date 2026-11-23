@@ -232,7 +232,7 @@ class Trainer(Handler):
             except:
                 return str(value)
         args = {}
-        skip_keys = {"path", "weights", "environment", "resume", "_default_epochs"}
+        skip_keys = {"path", "weights", "environment", "resume"}
         for key, value in self.cfg.items():
             if key in skip_keys:
                 continue
