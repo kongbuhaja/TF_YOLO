@@ -1,12 +1,12 @@
 task: &task bbox # bbox, segment
 
 model: yolo11n.yaml
-data: coco_mini
-epochs: 30
-close_mosaic: 1
+data: coco
+epochs: 500
+close_mosaic: 50
 workers: 8
-batch_size: &batch_size 64
-cache: &cache False # need least 100G memory
+batch_size: 32
+cache: False # need least 100G memory
 prefetch_size: 8
 shuffle: True
 input_shape: &input_shape [640, 640, 3]
@@ -17,7 +17,7 @@ resume: False
 normalize: True
 max_det: &max_det 300
 period: 1 # save, valid model period
-amp: fp16 # fp16, bf16, False
+amp: bf16 # fp16, bf16, False
 export: 
 
 optimizer: 
@@ -48,9 +48,6 @@ augmentation:
   random_hsv: [0.15, 0.7, 0.4] # (+/- H, S, V)
   flip_ud: 0.0 # (prob)
   flip_lr: 0.5 # (prob)
-  
-# process:
-#   resize_padding: [*input_shape, *constant, True] # (input_shape, constant, center)
 
 process:
   filter: 10 # pixel or ratio

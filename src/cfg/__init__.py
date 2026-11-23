@@ -30,6 +30,10 @@ class Config:
             config_data = kwargs
         else:
             file = kwargs.get("file", DEFAULT)
+            if file == DEFAULT:
+                self._default_epochs = kwargs.get("epochs") is None
+                if "epochs" in kwargs and kwargs["epochs"] is None:
+                    kwargs = {k: v for k, v in kwargs.items() if k != "epochs"}
             config_data = yaml_load(file)
             config_data.update(kwargs)
 
@@ -43,6 +47,7 @@ class Config:
             file, scale, weight, saved_path = _get_model_file(self.model)
             
             input_shape = getattr(self, "input_shape", None)
+            normalize = getattr(self, "normalize", True)
             
             self.model = Config(
                 name=file.stem,
@@ -50,6 +55,7 @@ class Config:
                 scale=scale,
                 weight=weight,
                 input_shape=input_shape,
+                normalize=normalize,
                 saved_path=saved_path
             )
 
@@ -125,7 +131,7 @@ def _get_model_file(file_name):
     file = Path(name).with_suffix(".yaml").name
 
     if os.path.exists(file_path):
-        return file_path, None, False, None
+        return file_path, scale, False, None
     elif file in files:
         return files[file], scale, False, None
     else:
@@ -136,6 +142,22 @@ def _resolve_saved_model(file_path):
     weights_dir = file_path.parent
     project_dir = weights_dir.parent
     dir_name = project_dir.name
+    files = _get_all_files(MODELS)
+
+    args_path = project_dir / "args.yaml"
+    if args_path.exists():
+        args = yaml_load(args_path) or {}
+        model_cfg = args.get("model", {}) if isinstance(args, dict) else {}
+        if isinstance(model_cfg, dict):
+            yaml_file = model_cfg.get("file")
+            scale = model_cfg.get("scale")
+            model_name = model_cfg.get("name")
+            if yaml_file and os.path.exists(yaml_file):
+                return Path(yaml_file).resolve(), scale, False, file_path
+            if model_name:
+                yaml_name = Path(model_name).with_suffix(".yaml").name
+                if yaml_name in files:
+                    return files[yaml_name], scale, False, file_path
 
     m = re.match(r"^(.+[nsmlx])(\d+)$", dir_name)
     if m:
@@ -152,7 +174,6 @@ def _resolve_saved_model(file_path):
         model_name = m2.group(3)
         scale = None
 
-    files = _get_all_files(MODELS)
     yaml_name = Path(model_name).with_suffix(".yaml").name
     if yaml_name not in files:
         raise FileNotFoundError(
