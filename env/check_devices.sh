@@ -1,5 +1,12 @@
 #!/bin/bash
 
+if [ ! -f /.dockerenv ] && [ ! -d /opt/intel/openvino_2022.3.2 ] && command -v docker >/dev/null 2>&1; then
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx tf_yolo; then
+    echo "(Host detected -> checking inside 'tf_yolo' container)"
+    exec docker exec tf_yolo sh /home/ML/TF_YOLO/env/check_devices.sh
+  fi
+fi
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LEGACY="$ROOT/env/uv/export/openvino_legacy"
 TFLITE="$ROOT/env/uv/export/tflite"
@@ -42,14 +49,14 @@ done
 echo
 echo "== NCS2 (OpenVINO MYRIAD) =="
 if [ -x "$LEGACY/.venv/bin/python" ]; then
-  [ -f "$LEGACY/env.sh" ] && source "$LEGACY/env.sh"
+  [ -f "$LEGACY/env.sh" ] && . "$LEGACY/env.sh"
   "$LEGACY/.venv/bin/python" - <<'EOF'
 try:
     from openvino.runtime import Core
     devices = Core().available_devices
     print("  available_devices:", devices)
     if "MYRIAD" not in devices:
-        print("  MYRIAD missing -> host udev rules (97-myriad-usbboot.rules) or USB passthrough")
+        print("  MYRIAD missing -> host udev rules (97-myriad-usbboot.rules) or run inside tf_yolo container")
 except Exception as e:
     print("  openvino import failed:", e)
 EOF
@@ -62,15 +69,24 @@ echo "== Coral (libedgetpu) =="
 if ldconfig -p 2>/dev/null | grep -q libedgetpu; then
   echo "  libedgetpu: $(ldconfig -p | grep libedgetpu | head -1 | awk '{print $1}')"
 else
-  echo "  libedgetpu MISSING -> sudo apt install libedgetpu1-std"
+  echo "  libedgetpu MISSING -> run inside tf_yolo container (or on host: sudo dpkg -i libedgetpu1-std.deb)"
 fi
-if [ -x "$TFLITE/.venv/bin/python" ]; then
-  "$TFLITE/.venv/bin/python" - <<'EOF'
+PY_BIN="python3"
+if [ -x "$TFLITE/.venv/bin/python" ] && "$TFLITE/.venv/bin/python" -c "import ai_edge_litert" 2>/dev/null; then
+  PY_BIN="$TFLITE/.venv/bin/python"
+fi
+"$PY_BIN" - <<'EOF'
 try:
-    from ai_edge_litert.interpreter import load_delegate
+    try:
+        from ai_edge_litert.interpreter import load_delegate
+    except ImportError:
+        try:
+            from tflite_runtime.interpreter import load_delegate
+        except ImportError:
+            import tensorflow as tf
+            load_delegate = tf.lite.experimental.load_delegate
     load_delegate("libedgetpu.so.1")
     print("  delegate load: OK")
 except Exception as e:
     print("  delegate load:", e)
 EOF
-fi

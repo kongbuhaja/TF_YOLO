@@ -13,9 +13,10 @@ x-common: &common
   stdin_open: true
   tty: true
   privileged: true
+  network_mode: host
   volumes:
     - ../../..:/home/ML
-    - /dev/bus/usb:/dev/bus/usb
+    - /dev:/dev
   working_dir: /home/ML/${REPO_DIR:-TF_YOLO}
 
 services:
@@ -33,44 +34,18 @@ services:
       HOST_PERMS: "${HOST_PERMS:-1000:1000}"
     command: ["bash"]
 
-  export-tflite:
-    profiles: ["pc"]
+  edge-base:
+    profiles: ["infer", "edge", "edge-base"]
     build:
       context: ../..
-      dockerfile: env/docker/export_tflite.dockerfile
-    image: tf_yolo_export_tflite:latest
-    <<: [*common, *gpu]
-    command: ["bash"]
-
-  export-onnx:
-    profiles: ["pc"]
-    build:
-      context: ../..
-      dockerfile: env/docker/export_onnx.dockerfile
-    image: tf_yolo_export_onnx:latest
-    <<: [*common, *gpu]
-    command: ["bash"]
-
-  export-openvino:
-    profiles: ["pc"]
-    build:
-      context: ../..
-      dockerfile: env/docker/export_openvino.dockerfile
-    image: tf_yolo_export_openvino:latest
-    <<: [*common, *gpu]
-    command: ["bash"]
-
-  export-tensorrt:
-    profiles: ["pc"]
-    build:
-      context: ../..
-      dockerfile: env/docker/export_tensorrt.dockerfile
-    image: tf_yolo_export_tensorrt:latest
-    <<: [*common, *gpu]
-    command: ["bash"]
+      dockerfile: env/docker/edge_base.dockerfile
+    image: tf_yolo_edge_base:latest
+    command: ["true"]
 
   edge-rpi-cpu:
     profiles: ["infer", "edge"]
+    depends_on:
+      - edge-base
     build:
       context: ../..
       dockerfile: env/docker/edge_rpi_cpu.dockerfile
@@ -80,6 +55,8 @@ services:
 
   edge-rpi-coral:
     profiles: ["infer", "edge"]
+    depends_on:
+      - edge-base
     build:
       context: ../..
       dockerfile: env/docker/edge_rpi_coral.dockerfile

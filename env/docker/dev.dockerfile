@@ -36,16 +36,19 @@ RUN uv export --project /tmp/dev --frozen --no-hashes -o /tmp/dev/requirements.t
     uv pip install --system -r /tmp/dev/requirements.txt && \
     rm -rf /tmp/dev
 
-RUN echo "== Install Coral Edge TPU runtime (libedgetpu) ==" && \
+RUN echo "== Install Coral Edge TPU runtime (libedgetpu) + compiler ==" && \
     apt-get update && \
-    apt-get install -y --no-install-recommends gnupg && \
-    curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | \
-        gpg --dearmor -o /usr/share/keyrings/coral-edgetpu.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/coral-edgetpu.gpg] https://packages.cloud.google.com/apt coral-edgetpu-stable main" \
-        > /etc/apt/sources.list.d/coral-edgetpu.list && \
-    apt-get update && \
-    apt-get install -y --no-install-recommends libedgetpu1-std edgetpu-compiler && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends libusb-1.0-0 && \
+    rm -rf /var/lib/apt/lists/* && \
+    curl -fsSL "https://github.com/feranick/libedgetpu/releases/download/16.0TF2.19.1-1/libedgetpu1-std_16.0tf2.19.1-1.ubuntu22.04_amd64.deb" -o /tmp/libedgetpu1-std.deb && \
+    dpkg -i /tmp/libedgetpu1-std.deb && \
+    rm -f /tmp/libedgetpu1-std.deb && \
+    mkdir -p /usr/local/bin/edgetpu_compiler_bin && \
+    curl -fsSL "https://raw.githubusercontent.com/mbrooksx/edgetpu-compilers/main/16.0/edgetpu_compiler" -o /usr/local/bin/edgetpu_compiler && \
+    for f in NOTICE edgetpu_compiler ld-linux-x86-64.so.2 libc++.so.1 libc++abi.so.1 libc.so.6 libdl.so.2 libm.so.6 libpthread.so.0 libresolv.so.2; do \
+        curl -fsSL "https://raw.githubusercontent.com/mbrooksx/edgetpu-compilers/main/16.0/edgetpu_compiler_bin/$f" -o "/usr/local/bin/edgetpu_compiler_bin/$f"; \
+    done && \
+    chmod +x /usr/local/bin/edgetpu_compiler /usr/local/bin/edgetpu_compiler_bin/edgetpu_compiler /usr/local/bin/edgetpu_compiler_bin/ld-linux-x86-64.so.2
 
 ARG OPENVINO_LEGACY=2022.3.2
 ARG OPENVINO_LEGACY_REV=9279.e2c7e4d7b4d
