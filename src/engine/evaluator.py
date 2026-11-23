@@ -8,7 +8,6 @@ import tensorflow as tf
 class Evaluator(Handler):
     def __init__(self, env, model, cfg, dataset):
         super().__init__(env, model, cfg, dataset, "eval")
-        self.eval_model = None
 
     def evaluate(self):
         self._is_exist_dir()
@@ -16,7 +15,6 @@ class Evaluator(Handler):
         meta_path = self.eval_path / "predictions.meta"
 
         if not pred_json_path.exists() or not self._is_reusable(pred_json_path, meta_path):
-            self._build_eval_model()
             self._evaluate_step(pred_json_path)
             self._save_meta(meta_path)
 
@@ -45,18 +43,6 @@ class Evaluator(Handler):
         with open(meta_path, "w") as f:
             json.dump(meta, f, indent=2)
 
-    def _build_eval_model(self):
-        weights = self.model.weights_path / "best"
-        if not weights.exists():
-            print(f"[Evaluate] best weights not found at {weights}, using engine model as-is")
-            self.eval_model = self.model
-            return
-        tf.keras.mixed_precision.set_global_policy("float32")
-        from src.cfg import Config
-        from src.models.model import Model
-        cfg = Config(model=weights, input_shape=list(self.cfg.input_shape))
-        self.eval_model = Model(cfg.model)
-
     def _evaluate_step(self, pred_json_path):
         preds_json_list = []
         is_new_gt = not self.dataset.is_exist_gt()
@@ -67,13 +53,13 @@ class Evaluator(Handler):
         for i, data in enumerate(self.pbar):
             batch_image = data["image"]
 
-            preds, _ = self.eval_model(batch_image.astype(np.float32), training=False)
+            preds, _ = self.model(batch_image.astype(np.float32), training=False)
 
             nms_preds = NMS(preds,
                             conf_th=self.cfg.conf_th,
                             iou_th=self.cfg.iou_th,
                             max_det=self.cfg.max_det,
-                            nc=self.eval_model.nc)
+                            nc=self.model.nc)
 
             for b, (image_id, image, pred, info) in enumerate(zip(data["image_id"], data["image"], nms_preds, data["info"])):
                 pred = np.asarray(pred)
