@@ -35,18 +35,26 @@ class Dataset():
                         "info": "automatically created gt json"}
         return False
     
-    def add_gt(self, image_id, image, gts):
+    def add_gt(self, image_id, image, gts, info=None):
+        if info is not None:
+            rx, ry, l, t = info
+            width = int(round((image.shape[1] - 2 * l) / rx))
+            height = int(round((image.shape[0] - 2 * t) / ry))
+        else:
+            width = image.shape[1]
+            height = image.shape[0]
         image_json = {"id": image_id,
                       "file_name": f"{'0'*(12 - len(str(image_id)))}{image_id}",
-                      "width": image.shape[1],
-                      "height": image.shape[0]}
+                      "width": width,
+                      "height": height}
         self.gt_images_json_list.append(image_json)
 
         for class_id, box in zip(gts[:, 0], gts[:, 1:]):
+            box = box.copy()
             box[:2] -= box[2:]/2
             anno_json = {"id": len(self.gt_annos_json_list)+1,
                          "image_id": image_id,
-                         "category_id": self.category_map[class_id]["id"],
+                         "category_id": self.category_map[int(class_id)]["id"],
                          "bbox": box.tolist(),
                          "area": int(np.prod(box[2:])),
                          "iscrowd": 0}

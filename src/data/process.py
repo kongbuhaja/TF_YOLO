@@ -367,6 +367,7 @@ class Flip_ud(Prob_transform):
         data["image"] = data["image"][::-1]
         h, w = np.array(data["image"].shape[:2]).astype(np.float32)
         flip_offset = 1. - 1./h
+        data["coords"] = data["coords"].copy()
         data["coords"][:, 1] = flip_offset - data["coords"][:, 1]
 
         return data
@@ -393,6 +394,7 @@ class Flip_lr(Prob_transform):
         data["image"] = data["image"][:, ::-1]
         h, w = np.array(data["image"].shape[:2]).astype(np.float32)
         flip_offset = 1. - 1./w
+        data["coords"] = data["coords"].copy()
         data["coords"][:, 0] = flip_offset - data["coords"][:, 0]
 
         return data

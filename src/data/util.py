@@ -147,8 +147,14 @@ class COCO(Data):
 def coco_eval(gt_json_path, dt_json_path, ann_type="bbox"):
     from pycocotools.coco import COCO
     from pycocotools.cocoeval import COCOeval
+    from pathlib import Path
     import io
     from contextlib import redirect_stdout
+
+    dt_json_path = Path(dt_json_path)
+    if not dt_json_path.exists() or dt_json_path.stat().st_size <= 2:
+        print("[Evaluate] No usable predictions; mAP = 0")
+        return np.zeros(12, dtype=np.float64)
 
     summary_path = dt_json_path.parent / "evaluation.log"
     coco_gt = COCO(gt_json_path)
